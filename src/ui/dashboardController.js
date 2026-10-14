@@ -1,10 +1,10 @@
 /**
- * @fileoverview Precision HiDPI UI controller for DHVANI-CAD.
- * Implements Retina devicePixelRatio canvas scaling, hardware Web Audio DSP binding,
- * live OpenStreetMap GPS reverse geocoding, and cross-device HTTPS SSE telemetry sync.
+ * @fileoverview Main UI controller for DHVANI-CAD binding the 6 SIP/RTP trunk visualizers,
+ * live Web Audio API oscilloscope/FFT spectrogram, hardware Geolocation, and Gemini 2.5 Flash triage.
+ * Uses strict DOM node creation (zero innerHTML) to guarantee XSS immunity.
  */
 
-import { TELECOM_NODES, FORENSIC_PRESETS } from "../config/telecomNodes.js";
+import { TELECOM_NODES, FORENSIC_PRESETS, recordDiagnosticEvent } from "../config/telecomNodes.js";
 import { LiveAudioInterceptor } from "../dsp/acousticAnalyzer.js";
 import { INCIDENT_CODES } from "../core/triageEngine.js";
 import {
@@ -17,6 +17,7 @@ import { RealWorldTelemetryRelay } from "../services/realtimeRelay.js";
 const channelCanvases = new Map();
 const interceptor = new LiveAudioInterceptor();
 let relay = null;
+
 let currentTelemetry = {
   f0Hz: 140.0,
   jitterPercent: 0.55,
@@ -27,42 +28,28 @@ let lastAuditPacket = null;
 let phaseTick = 0;
 
 /**
- * Scales an HTML5 Canvas by window.devicePixelRatio for razor-sharp 4K/Retina rendering.
- * @param {HTMLCanvasElement} canvas
- * @returns {{ ctx: CanvasRenderingContext2D, width: number, height: number }}
+ * Bootstraps the DHVANI-CAD console once the DOM is ready.
  */
-function configureHiDpiCanvas(canvas) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const rect = canvas.getBoundingClientRect();
-  const logicalWidth = rect.width > 0 ? Math.round(rect.width) : Number(canvas.getAttribute("width")) || 320;
-  const logicalHeight = rect.height > 0 ? Math.round(rect.height) : Number(canvas.getAttribute("height")) || 100;
-
-  if (canvas.width !== logicalWidth * dpr || canvas.height !== logicalHeight * dpr) {
-    canvas.width = logicalWidth * dpr;
-    canvas.height = logicalHeight * dpr;
-  }
-
-  const ctx = canvas.getContext("2d");
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  return { ctx, width: logicalWidth, height: logicalHeight };
-}
-
 function initDashboard() {
-  renderChannelRack();
+  renderChannelList();
   initRealWorldRelayAndGps();
-  bindHardwareControls();
+  bindControls();
   startClock();
   start60FpsRenderLoop();
   updateEngineStatusBadge();
 }
 
+/**
+ * Initializes the cross-device SSE telemetry stream and hardware GPS watcher.
+ */
 function initRealWorldRelayAndGps() {
   const roomInput = document.getElementById("relayRoomInput");
-  const initialRoom = roomInput?.value || "dhvani-vvitu-112";
+  const initialRoom = roomInput ? roomInput.value : "dhvani-vvitu-112";
 
   relay = new RealWorldTelemetryRelay(initialRoom, (remotePacket) => {
     renderIncomingTelemetryPacket(remotePacket, true);
   });
+
   relay.connectLiveStream(initialRoom);
 
   if (roomInput) {
@@ -73,22 +60,22 @@ function initRealWorldRelayAndGps() {
 
   relay.startLiveGpsTracking((gps) => {
     const gpsFixBadge = document.getElementById("gpsFixBadge");
-    const gpsAccuracyMeta = document.getElementById("gpsAccuracyMeta");
-    const liveAddressHeader = document.getElementById("liveAddressHeader");
+    const gpsAccMeta = document.getElementById("gpsAccuracyMeta");
+    const liveAddrHeader = document.getElementById("liveAddressHeader");
     const ticketCoords = document.getElementById("ticketCoords");
     const ticketCellId = document.getElementById("ticketCellId");
-    const liveGoogleMapsLink = document.getElementById("liveGoogleMapsLink");
+    const mapsLink = document.getElementById("liveGoogleMapsLink");
 
     if (gpsFixBadge) {
       gpsFixBadge.textContent = gps.isHardwareFix
         ? `${gps.lat.toFixed(4)}N, ${gps.lng.toFixed(4)}E`
-        : "16.3462N, 80.5249E";
+        : "CELL-SECTOR";
     }
-    if (gpsAccuracyMeta) {
-      gpsAccuracyMeta.textContent = `GPS: +/- ${gps.accuracyMeters}m`;
+    if (gpsAccMeta) {
+      gpsAccMeta.textContent = `GPS ACC: +/- ${gps.accuracyMeters}m`;
     }
-    if (liveAddressHeader) {
-      liveAddressHeader.textContent = `LIVE SECTOR: ${gps.resolvedAddress.toUpperCase()}`;
+    if (liveAddrHeader) {
+      liveAddrHeader.textContent = `LIVE LOCATION: ${gps.resolvedAddress.toUpperCase()}`;
     }
     if (ticketCoords) {
       ticketCoords.textContent = `${gps.lat.toFixed(5)} N, ${gps.lng.toFixed(5)} E`;
@@ -96,44 +83,97 @@ function initRealWorldRelayAndGps() {
     if (ticketCellId) {
       ticketCellId.textContent = gps.resolvedAddress;
     }
-    if (liveGoogleMapsLink) {
-      liveGoogleMapsLink.href = `https://www.google.com/maps?q=${gps.lat},${gps.lng}`;
+    if (mapsLink) {
+      mapsLink.href = `https://www.google.com/maps?q=${encodeURIComponent(gps.lat)},${encodeURIComponent(gps.lng)}`;
     }
   });
 }
 
-function renderChannelRack() {
-  const container = document.getElementById("channelListContainer");
-  if (!container) return;
-  container.innerHTML = "";
+/**
+ * Constructs a single telecom channel card using safe DOM APIs (no innerHTML).
+ * @param {Object} node Telecom node configuration
+ * @returns {{ card: HTMLElement, canvas: HTMLCanvasElement }}
+ */
+function createChannelCardElement(node) {
+  const card = document.createElement("div");
+  card.className = `channel-card ${node.isLiveHardwareChannel ? "active-intercept" : ""}`;
+  card.id = `card-${node.channelId}`;
+  card.setAttribute("role", "listitem");
 
-  for (const node of TELECOM_NODES) {
-    const slot = document.createElement("div");
-    slot.className = `trunk-slot ${node.isLiveHardwareChannel ? "slot-primary" : ""}`;
-    slot.id = `card-${node.channelId}`;
-    slot.setAttribute("role", "listitem");
-    slot.innerHTML = `
-      <div class="trunk-row-top">
-        <div class="trunk-ident">
-          <span class="lamp lamp-nominal" id="led-${node.channelId}"></span>
-          <span>${node.channelId} // ${node.cellId}</span>
-        </div>
-        <span class="tabular" style="font-size:10px;color:#9ca3af;">${node.rssiDbm} dBm</span>
-      </div>
-      <div class="trunk-sector-name">${node.sectorName}</div>
-      <canvas class="mini-scope-canvas" id="wave-${node.channelId}" width="318" height="30"></canvas>
-      <div class="trunk-telemetry-row">
-        <span>${node.sipTrunk}</span>
-        <span id="submetric-${node.channelId}" class="tabular">F0: ${node.baselineF0}Hz | JIT: ${node.baselineJitter}%</span>
-      </div>
-    `;
-    container.appendChild(slot);
-    const canvas = slot.querySelector("canvas");
-    channelCanvases.set(node.channelId, { canvas, node });
-  }
+  const topRow = document.createElement("div");
+  topRow.className = "channel-top";
+
+  const idCluster = document.createElement("div");
+  idCluster.className = "channel-id";
+
+  const led = document.createElement("span");
+  led.className = "led led-nominal";
+  led.id = `led-${node.channelId}`;
+  led.setAttribute("aria-hidden", "true");
+
+  const titleSpan = document.createElement("span");
+  titleSpan.textContent = `${node.channelId} // ${node.cellId}`;
+
+  idCluster.append(led, titleSpan);
+
+  const rssiSpan = document.createElement("span");
+  rssiSpan.className = "rssi-tag";
+  rssiSpan.textContent = `${node.rssiDbm} dBm`;
+
+  topRow.append(idCluster, rssiSpan);
+
+  const sectorDiv = document.createElement("div");
+  sectorDiv.className = "channel-sector";
+  sectorDiv.textContent = node.sectorName;
+
+  const canvas = document.createElement("canvas");
+  canvas.className = "channel-wave-canvas";
+  canvas.id = `wave-${node.channelId}`;
+  canvas.width = 310;
+  canvas.height = 32;
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", `Waveform monitor for ${node.channelId}`);
+
+  const metricsRow = document.createElement("div");
+  metricsRow.className = "channel-metrics";
+
+  const trunkSpan = document.createElement("span");
+  trunkSpan.textContent = `TRUNK: ${node.sipTrunk}`;
+
+  const submetricSpan = document.createElement("span");
+  submetricSpan.id = `submetric-${node.channelId}`;
+  submetricSpan.textContent = `F0: ${node.baselineF0}Hz | JIT: ${node.baselineJitter}%`;
+
+  metricsRow.append(trunkSpan, submetricSpan);
+  card.append(topRow, sectorDiv, canvas, metricsRow);
+
+  return { card, canvas };
 }
 
-function bindHardwareControls() {
+/**
+ * Renders all 6 cellular trunk monitors into the left column.
+ */
+function renderChannelList() {
+  const container = document.getElementById("channelListContainer");
+  if (!container) return;
+
+  const fragment = document.createDocumentFragment();
+  for (const node of TELECOM_NODES) {
+    const { card, canvas } = createChannelCardElement(node);
+    fragment.appendChild(card);
+    channelCanvases.set(node.channelId, {
+      canvas,
+      ctx: canvas.getContext("2d"),
+      node
+    });
+  }
+  container.replaceChildren(fragment);
+}
+
+/**
+ * Binds UI buttons, presets, and modal dialogs.
+ */
+function bindControls() {
   document.querySelectorAll("[data-preset]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const presetKey = btn.getAttribute("data-preset");
@@ -144,33 +184,33 @@ function bindHardwareControls() {
     });
   });
 
-  const toggleMicBtn = document.getElementById("toggleLiveMicBtn");
-  if (toggleMicBtn) {
-    toggleMicBtn.addEventListener("click", toggleContinuousGuardian);
+  const liveMicBtn = document.getElementById("toggleLiveMicBtn");
+  if (liveMicBtn) {
+    liveMicBtn.addEventListener("click", toggleContinuousGuardian);
   }
 
   const modal = document.getElementById("apiKeyModal");
   const keyInput = document.getElementById("geminiApiKeyInput");
-  const openKeyBtn = document.getElementById("openApiKeyModalBtn");
-  const closeKeyBtn = document.getElementById("closeApiKeyModalBtn");
-  const saveKeyBtn = document.getElementById("saveApiKeyBtn");
+  const openBtn = document.getElementById("openApiKeyModalBtn");
+  const closeBtn = document.getElementById("closeApiKeyModalBtn");
+  const saveBtn = document.getElementById("saveApiKeyBtn");
 
-  if (openKeyBtn && modal && keyInput) {
-    openKeyBtn.addEventListener("click", () => {
+  if (openBtn && modal && keyInput) {
+    openBtn.addEventListener("click", () => {
       keyInput.value = getStoredGeminiKey();
       modal.hidden = false;
       keyInput.focus();
     });
   }
 
-  if (closeKeyBtn && modal) {
-    closeKeyBtn.addEventListener("click", () => {
+  if (closeBtn && modal) {
+    closeBtn.addEventListener("click", () => {
       modal.hidden = true;
     });
   }
 
-  if (saveKeyBtn && modal && keyInput) {
-    saveKeyBtn.addEventListener("click", () => {
+  if (saveBtn && modal && keyInput) {
+    saveBtn.addEventListener("click", () => {
       setStoredGeminiKey(keyInput.value);
       modal.hidden = true;
       updateEngineStatusBadge();
@@ -183,22 +223,30 @@ function bindHardwareControls() {
   }
 }
 
+/**
+ * Updates the engine status indicator based on whether a Gemini API key is configured.
+ */
 function updateEngineStatusBadge() {
   const hasKey = Boolean(getStoredGeminiKey());
   const el = document.getElementById("engineModeReadout");
   if (el) {
-    el.textContent = hasKey ? "GEMINI-2.5 + DSP ACTIVE" : "LOCAL AUTOCORRELATION DSP";
+    el.textContent = hasKey ? "GEMINI-2.5 + LIVE VAD" : "CONTINUOUS DSP + VAD";
   }
 }
 
+/**
+ * Toggles the continuous zero-touch microphone guardian on Channel 06.
+ */
 async function toggleContinuousGuardian() {
   const btn = document.getElementById("toggleLiveMicBtn");
   const label = document.getElementById("liveMicBtnLabel");
+  if (!btn || !label) return;
 
   if (interceptor.isActive) {
     interceptor.stop();
-    btn?.classList.remove("armed");
-    if (label) label.textContent = "ARM ZERO-TOUCH CONTINUOUS GUARDIAN";
+    btn.classList.remove("recording");
+    btn.setAttribute("aria-pressed", "false");
+    label.textContent = "[ARM ZERO-TOUCH CONTINUOUS GUARDIAN]";
     return;
   }
 
@@ -206,19 +254,26 @@ async function toggleContinuousGuardian() {
     await interceptor.startContinuousGuardian(async (autonomousPayload) => {
       await processAndBroadcastScenario(autonomousPayload);
     });
-    btn?.classList.add("armed");
-    if (label) label.textContent = "GUARDIAN ARMED — HANDS-FREE VAD ACTIVE";
-    const transcriptEl = document.getElementById("transcriptReadout");
-    if (transcriptEl) {
-      transcriptEl.textContent =
-        "[ZERO-TOUCH GUARDIAN ARMED: SPEAK IN TELUGU/ENGLISH OR WHISPER HANDS-FREE]";
+    btn.classList.add("recording");
+    btn.setAttribute("aria-pressed", "true");
+    label.textContent = "[GUARDIAN ARMED — HANDS-FREE LISTENING ACTIVE]";
+    const readout = document.getElementById("transcriptReadout");
+    if (readout) {
+      readout.textContent =
+        "[GUARDIAN ARMED: SPEAK IN TELUGU/ENGLISH OR WHISPER HANDS-FREE — NO BUTTON PRESS NEEDED]";
     }
-  } catch (_) {
-    btn?.classList.remove("armed");
-    if (label) label.textContent = "MIC PERMISSION REQUIRED FOR LIVE GUARDIAN";
+  } catch (micError) {
+    recordDiagnosticEvent("MIC_GUARDIAN", micError);
+    btn.classList.remove("recording");
+    btn.setAttribute("aria-pressed", "false");
+    label.textContent = "[MIC PERMISSION REQUIRED FOR LIVE GUARDIAN]";
   }
 }
 
+/**
+ * Runs acoustic + semantic triage and broadcasts the resulting packet across connected devices.
+ * @param {Object} payload Input telemetry frame
+ */
 async function processAndBroadcastScenario(payload) {
   const { result, engineSource, latencyMs } = await analyzeEmergencyStream(payload);
   const fullPacket = {
@@ -236,6 +291,11 @@ async function processAndBroadcastScenario(payload) {
   renderIncomingTelemetryPacket(broadcasted, false);
 }
 
+/**
+ * Renders an evaluated emergency telemetry packet into all dashboard gauges and cards.
+ * @param {Object} packet Triage packet
+ * @param {boolean} [isRemoteRelay=false] True if received over SSE from a remote field device
+ */
 function renderIncomingTelemetryPacket(packet, isRemoteRelay = false) {
   currentTelemetry = {
     f0Hz: Number(packet.f0Hz || 140),
@@ -243,133 +303,142 @@ function renderIncomingTelemetryPacket(packet, isRemoteRelay = false) {
     dbSpl: Number(packet.dbSpl || 60),
     zcr: Number(packet.zcr || 0.068)
   };
+
   lastAuditPacket = packet;
 
-  const f0El = document.getElementById("metricF0");
-  const jitEl = document.getElementById("metricJitter");
-  const splEl = document.getElementById("metricSpl");
-  const zcrEl = document.getElementById("metricZcr");
-  const cursorEl = document.getElementById("f0PeakCursorLabel");
-  const latencyEl = document.getElementById("inferenceLatencyReadout");
-  const langBadge = document.getElementById("detectedLangBadge");
-  const transcriptEl = document.getElementById("transcriptReadout");
+  document.getElementById("metricF0").textContent = `${currentTelemetry.f0Hz.toFixed(1)} Hz`;
+  document.getElementById("metricJitter").textContent = `${currentTelemetry.jitterPercent.toFixed(2)} %`;
+  document.getElementById("metricSpl").textContent = `${currentTelemetry.dbSpl.toFixed(1)} dB`;
+  document.getElementById("metricZcr").textContent = currentTelemetry.zcr.toFixed(3);
+  document.getElementById("f0PeakCursorLabel").textContent = `F0 PEAK: ${currentTelemetry.f0Hz.toFixed(1)} Hz`;
 
-  if (f0El) f0El.textContent = `${currentTelemetry.f0Hz.toFixed(1)} Hz`;
-  if (jitEl) jitEl.textContent = `${currentTelemetry.jitterPercent.toFixed(2)} %`;
-  if (splEl) splEl.textContent = `${currentTelemetry.dbSpl.toFixed(1)} dB`;
-  if (zcrEl) zcrEl.textContent = currentTelemetry.zcr.toFixed(3);
-  if (cursorEl) cursorEl.textContent = `F0 PEAK: ${currentTelemetry.f0Hz.toFixed(1)} Hz`;
-  if (latencyEl) {
-    latencyEl.textContent = `LATENCY: ${packet.latencyMs || 5} ms ${isRemoteRelay ? "(REMOTE RELAY)" : "(LOCAL DSP)"}`;
-  }
-  if (langBadge) langBadge.textContent = `LANG: ${packet.detectedLanguage}`;
-  if (transcriptEl) transcriptEl.textContent = packet.verbatimTranscript;
+  document.getElementById("inferenceLatencyReadout").textContent =
+    `LATENCY: ${packet.latencyMs || 6} ms ${isRemoteRelay ? "(REMOTE FIELD NODE)" : "(LOCAL NODE)"}`;
+  document.getElementById("detectedLangBadge").textContent = `LANG: ${packet.detectedLanguage}`;
+  document.getElementById("transcriptReadout").textContent = packet.verbatimTranscript;
 
   if (packet.gps) {
-    const coordsEl = document.getElementById("ticketCoords");
-    const cellEl = document.getElementById("ticketCellId");
-    const mapsLink = document.getElementById("liveGoogleMapsLink");
-    if (coordsEl) coordsEl.textContent = `${packet.gps.lat.toFixed(5)} N, ${packet.gps.lng.toFixed(5)} E`;
-    if (cellEl) cellEl.textContent = packet.gps.resolvedAddress;
-    if (mapsLink) mapsLink.href = `https://www.google.com/maps?q=${packet.gps.lat},${packet.gps.lng}`;
+    document.getElementById("ticketCoords").textContent =
+      `${Number(packet.gps.lat).toFixed(5)} N, ${Number(packet.gps.lng).toFixed(5)} E`;
+    document.getElementById("ticketCellId").textContent = packet.gps.resolvedAddress;
+    document.getElementById("liveGoogleMapsLink").href =
+      `https://www.google.com/maps?q=${encodeURIComponent(packet.gps.lat)},${encodeURIComponent(packet.gps.lng)}`;
   }
 
   const links = relay.buildEmergencyDispatchLinks(packet);
-  const smsLink = document.getElementById("liveSms112Link");
-  if (smsLink) smsLink.href = links.smsHref;
+  document.getElementById("liveSms112Link").href = links.smsHref;
 
   updateGateMeters(packet);
   updateMarkerTags(packet.paralinguisticMarkers, packet.acousticEnvironment);
   updateDispatchTicket(packet, packet.engineSource || "LIVE_RELAY");
 }
 
+/**
+ * Updates the 3 Dual-Threshold progress bars and their ARIA attributes.
+ * @param {Object} result
+ */
 function updateGateMeters(result) {
   const kwFill = document.getElementById("keywordMeterFill");
   const vsFill = document.getElementById("vocalStressMeterFill");
   const compFill = document.getElementById("compositeMeterFill");
-  const kwVal = document.getElementById("keywordScoreVal");
-  const vsVal = document.getElementById("vocalStressScoreVal");
-  const compVal = document.getElementById("compositeScoreVal");
 
-  if (kwVal) kwVal.textContent = `${result.keywordIndex}%`;
-  if (vsVal) vsVal.textContent = `${result.vocalStressIndex}%`;
-  if (compVal) compVal.textContent = `${result.compositeThreatScore}%`;
+  const kwTrack = document.getElementById("keywordProgressTrack");
+  const vsTrack = document.getElementById("vocalStressProgressTrack");
+  const compTrack = document.getElementById("compositeProgressTrack");
 
-  if (kwFill) {
-    kwFill.style.width = `${result.keywordIndex}%`;
-    kwFill.style.backgroundColor = result.keywordIndex >= 60 ? "#ffb020" : "#00e599";
-  }
-  if (vsFill) {
-    vsFill.style.width = `${result.vocalStressIndex}%`;
-    vsFill.style.backgroundColor = result.vocalStressIndex >= 70 ? "#ff2e4c" : "#00e599";
-  }
-  if (compFill) {
-    compFill.style.width = `${result.compositeThreatScore}%`;
-    compFill.style.backgroundColor =
-      result.compositeThreatScore >= 78
-        ? "#ff2e4c"
-        : result.incidentCode === INCIDENT_CODES.FALSE_POSITIVE
-        ? "#00e599"
-        : "#00b8ff";
-  }
+  document.getElementById("keywordScoreVal").textContent = `${result.keywordIndex}%`;
+  document.getElementById("vocalStressScoreVal").textContent = `${result.vocalStressIndex}%`;
+  document.getElementById("compositeScoreVal").textContent = `${result.compositeThreatScore}%`;
+
+  if (kwTrack) kwTrack.setAttribute("aria-valuenow", String(result.keywordIndex));
+  if (vsTrack) vsTrack.setAttribute("aria-valuenow", String(result.vocalStressIndex));
+  if (compTrack) compTrack.setAttribute("aria-valuenow", String(result.compositeThreatScore));
+
+  kwFill.style.width = `${result.keywordIndex}%`;
+  kwFill.style.backgroundColor = result.keywordIndex >= 60 ? "#f59e0b" : "#10b981";
+
+  vsFill.style.width = `${result.vocalStressIndex}%`;
+  vsFill.style.backgroundColor = result.vocalStressIndex >= 70 ? "#ef4444" : "#10b981";
+
+  compFill.style.width = `${result.compositeThreatScore}%`;
+  compFill.style.backgroundColor =
+    result.compositeThreatScore >= 78
+      ? "#ef4444"
+      : result.incidentCode === INCIDENT_CODES.FALSE_POSITIVE
+      ? "#10b981"
+      : "#38bdf8";
 }
 
+/**
+ * Safely populates the paralinguistic marker badges using replaceChildren.
+ * @param {string[]} [markers=[]]
+ * @param {string[]} [envTags=[]]
+ */
 function updateMarkerTags(markers = [], envTags = []) {
   const container = document.getElementById("markerTagsContainer");
   if (!container) return;
-  container.innerHTML = "";
+
+  const fragment = document.createDocumentFragment();
   [...markers, ...envTags].forEach((tag) => {
     const span = document.createElement("span");
-    span.className = "forensic-chip";
-    span.textContent = tag;
-    container.appendChild(span);
+    span.className = "marker-tag";
+    span.textContent = String(tag);
+    fragment.appendChild(span);
   });
+  container.replaceChildren(fragment);
 }
 
+/**
+ * Updates the right-hand PSAP dispatch ticket and triangulation reticle.
+ * @param {Object} result
+ * @param {string} engineSource
+ */
 function updateDispatchTicket(result, engineSource) {
   const card = document.getElementById("dispatchTicketCard");
   const banner = document.getElementById("incidentCodeBanner");
   const ch6Card = document.getElementById("card-CH-06");
   const ch6Led = document.getElementById("led-CH-06");
   const targetLockGroup = document.getElementById("targetLockGroup");
-  const ticketUnit = document.getElementById("ticketUnit");
-  const ticketSirenPolicy = document.getElementById("ticketSirenPolicy");
-  const ticketEngineSource = document.getElementById("ticketEngineSource");
-  const ticketTacticalBrief = document.getElementById("ticketTacticalBrief");
 
-  card?.classList.remove("state-critical", "state-covert");
-  ch6Card?.classList.remove("slot-critical");
-  if (ch6Led) ch6Led.className = "lamp lamp-nominal";
+  card.classList.remove("status-critical", "status-covert");
+  if (ch6Card) ch6Card.classList.remove("alert-critical");
+  if (ch6Led) ch6Led.className = "led led-nominal";
 
-  if (banner) banner.textContent = result.incidentCode;
-  if (ticketUnit) ticketUnit.textContent = result.dispatchDirective.unitCallsign;
-  if (ticketSirenPolicy) ticketSirenPolicy.textContent = result.dispatchDirective.sirenPolicy;
-  if (ticketEngineSource) ticketEngineSource.textContent = engineSource;
-  if (ticketTacticalBrief) ticketTacticalBrief.textContent = result.dispatchDirective.tacticalBrief;
+  banner.textContent = result.incidentCode;
+  document.getElementById("ticketUnit").textContent = result.dispatchDirective.unitCallsign;
+  document.getElementById("ticketSirenPolicy").textContent = result.dispatchDirective.sirenPolicy;
+  document.getElementById("ticketEngineSource").textContent = engineSource;
+  document.getElementById("ticketTacticalBrief").textContent = result.dispatchDirective.tacticalBrief;
 
   if (result.incidentCode === INCIDENT_CODES.SILENT_INTERVENTION) {
-    card?.classList.add("state-covert");
-    if (ch6Led) ch6Led.className = "lamp lamp-amber";
-    targetLockGroup?.setAttribute("opacity", "1");
+    card.classList.add("status-covert");
+    if (ch6Led) ch6Led.className = "led led-amber";
+    if (targetLockGroup) targetLockGroup.setAttribute("opacity", "1");
   } else if (
     result.incidentCode === INCIDENT_CODES.CRITICAL_DISPATCH ||
     result.incidentCode === INCIDENT_CODES.MEDICAL_MVA
   ) {
-    card?.classList.add("state-critical");
-    ch6Card?.classList.add("slot-critical");
-    if (ch6Led) ch6Led.className = "lamp lamp-critical";
-    targetLockGroup?.setAttribute("opacity", "1");
-  } else {
-    targetLockGroup?.setAttribute("opacity", "0.28");
+    card.classList.add("status-critical");
+    if (ch6Card) ch6Card.classList.add("alert-critical");
+    if (ch6Led) ch6Led.className = "led led-critical";
+    if (targetLockGroup) targetLockGroup.setAttribute("opacity", "1");
+  } else if (targetLockGroup) {
+    targetLockGroup.setAttribute("opacity", "0.25");
   }
 }
 
+/**
+ * Starts the 60fps Canvas render loop for the time-domain oscilloscope and FFT spectrogram.
+ */
 function start60FpsRenderLoop() {
   const timeCanvas = document.getElementById("timeDomainCanvas");
+  const timeCtx = timeCanvas.getContext("2d");
   const freqCanvas = document.getElementById("frequencyCanvas");
+  const freqCtx = freqCanvas.getContext("2d");
 
   function renderFrame() {
-    phaseTick += 0.075;
+    phaseTick += 0.08;
+
     const liveSample = interceptor.isActive
       ? interceptor.sampleTelemetry(async (nonVerbalSpike) => {
           await processAndBroadcastScenario(nonVerbalSpike);
@@ -378,24 +447,19 @@ function start60FpsRenderLoop() {
 
     if (liveSample) {
       currentTelemetry = liveSample;
-      const f0El = document.getElementById("metricF0");
-      const jitEl = document.getElementById("metricJitter");
-      const splEl = document.getElementById("metricSpl");
-      const zcrEl = document.getElementById("metricZcr");
-      const submetricCh6 = document.getElementById("submetric-CH-06");
-
-      if (f0El) f0El.textContent = `${liveSample.f0Hz.toFixed(1)} Hz`;
-      if (jitEl) jitEl.textContent = `${liveSample.jitterPercent.toFixed(2)} %`;
-      if (splEl) splEl.textContent = `${liveSample.dbSpl.toFixed(1)} dB`;
-      if (zcrEl) zcrEl.textContent = liveSample.zcr.toFixed(3);
-      if (submetricCh6) {
-        submetricCh6.textContent = `F0: ${liveSample.f0Hz.toFixed(0)}Hz | JIT: ${liveSample.jitterPercent.toFixed(2)}%`;
+      document.getElementById("metricF0").textContent = `${liveSample.f0Hz.toFixed(1)} Hz`;
+      document.getElementById("metricJitter").textContent = `${liveSample.jitterPercent.toFixed(2)} %`;
+      document.getElementById("metricSpl").textContent = `${liveSample.dbSpl.toFixed(1)} dB`;
+      document.getElementById("metricZcr").textContent = liveSample.zcr.toFixed(3);
+      const subCh6 = document.getElementById("submetric-CH-06");
+      if (subCh6) {
+        subCh6.textContent = `F0: ${liveSample.f0Hz.toFixed(0)}Hz | JIT: ${liveSample.jitterPercent.toFixed(2)}%`;
       }
     }
 
     drawMiniChannelWaveforms();
-    if (timeCanvas) drawHiDpiOscilloscope(timeCanvas, liveSample);
-    if (freqCanvas) drawHiDpiSpectrogram(freqCanvas, liveSample);
+    drawPrimaryOscilloscope(timeCtx, timeCanvas.width, timeCanvas.height, liveSample);
+    drawPrimarySpectrogram(freqCtx, freqCanvas.width, freqCanvas.height, liveSample);
 
     requestAnimationFrame(renderFrame);
   }
@@ -403,28 +467,31 @@ function start60FpsRenderLoop() {
   requestAnimationFrame(renderFrame);
 }
 
+/**
+ * Draws the 6 compact SIP channel waveform strips.
+ */
 function drawMiniChannelWaveforms() {
-  channelCanvases.forEach(({ canvas, node }) => {
-    if (!canvas) return;
-    const { ctx, width: w, height: h } = configureHiDpiCanvas(canvas);
-    ctx.fillStyle = "#050608";
-    ctx.fillRect(0, 0, w, h);
+  channelCanvases.forEach(({ canvas, ctx, node }) => {
+    const width = canvas.width;
+    const height = canvas.height;
+    ctx.fillStyle = "#05080f";
+    ctx.fillRect(0, 0, width, height);
 
     const isCh6 = node.isLiveHardwareChannel;
     const isCritical = isCh6 && currentTelemetry.jitterPercent >= 2.2;
-    ctx.strokeStyle = isCritical ? "#ff2e4c" : isCh6 ? "#00b8ff" : "#00e599";
-    ctx.lineWidth = 1.25;
+    ctx.strokeStyle = isCritical ? "#ef4444" : isCh6 ? "#38bdf8" : "#10b981";
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
 
-    const freqFactor = isCh6 ? currentTelemetry.f0Hz / 115 : node.baselineF0 / 125;
-    const amp = isCh6 ? Math.min(11, (currentTelemetry.dbSpl - 30) / 5.8) : 5.5;
+    const freqFactor = isCh6 ? currentTelemetry.f0Hz / 110 : node.baselineF0 / 120;
+    const amp = isCh6 ? Math.min(13, (currentTelemetry.dbSpl - 30) / 5.5) : 6;
 
-    for (let x = 0; x < w; x += 2) {
+    for (let x = 0; x < width; x += 2) {
       const jitterNoise =
         isCh6 && currentTelemetry.jitterPercent > 1.8
-          ? Math.sin(x * 0.85 + phaseTick * 4) * (currentTelemetry.jitterPercent * 1.05)
+          ? Math.sin(x * 0.9 + phaseTick * 4) * (currentTelemetry.jitterPercent * 1.1)
           : 0;
-      const y = h / 2 + Math.sin(x * 0.055 * freqFactor + phaseTick) * amp + jitterNoise;
+      const y = height / 2 + Math.sin(x * 0.06 * freqFactor + phaseTick) * amp + jitterNoise;
       if (x === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
@@ -432,50 +499,48 @@ function drawMiniChannelWaveforms() {
   });
 }
 
-function drawHiDpiOscilloscope(canvas, liveSample) {
-  const { ctx, width: w, height: h } = configureHiDpiCanvas(canvas);
-  ctx.fillStyle = "#050608";
-  ctx.fillRect(0, 0, w, h);
+/**
+ * Renders the primary time-domain PCM oscilloscope trace.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} width
+ * @param {number} height
+ * @param {Object|null} liveSample
+ */
+function drawPrimaryOscilloscope(ctx, width, height, liveSample) {
+  ctx.fillStyle = "#04070d";
+  ctx.fillRect(0, 0, width, height);
 
-  // Draw calibrated graticule grid
-  ctx.strokeStyle = "#10141f";
+  ctx.strokeStyle = "#111c2d";
   ctx.lineWidth = 1;
-  const stepX = w / 8;
-  const stepY = h / 4;
   ctx.beginPath();
-  for (let x = stepX; x < w; x += stepX) {
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, h);
-  }
-  for (let y = stepY; y < h; y += stepY) {
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y);
-  }
+  ctx.moveTo(0, height / 2);
+  ctx.lineTo(width, height / 2);
   ctx.stroke();
 
   const isStressed = currentTelemetry.jitterPercent >= 2.0;
-  ctx.strokeStyle = isStressed ? "#ff2e4c" : "#00e599";
-  ctx.lineWidth = 1.65;
+  ctx.strokeStyle = isStressed ? "#ef4444" : "#10b981";
+  ctx.lineWidth = 1.6;
   ctx.beginPath();
 
   if (liveSample && liveSample.timeDomainData) {
     const buf = liveSample.timeDomainData;
-    const slice = w / buf.length;
+    const slice = width / buf.length;
     for (let i = 0; i < buf.length; i++) {
       const x = i * slice;
-      const y = (0.5 + buf[i] * 0.44) * h;
+      const y = (0.5 + buf[i] * 0.45) * height;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
   } else {
     const f0Ratio = currentTelemetry.f0Hz / 95;
-    const amp = Math.min(46, Math.max(7, (currentTelemetry.dbSpl - 30) * 0.64));
-    const jitterMod = currentTelemetry.jitterPercent * 2.15;
-    for (let x = 0; x < w; x++) {
+    const amp = Math.min(44, Math.max(8, (currentTelemetry.dbSpl - 30) * 0.62));
+    const jitterMod = currentTelemetry.jitterPercent * 2.2;
+
+    for (let x = 0; x < width; x++) {
       const harmonic =
-        Math.sin(x * 0.044 * f0Ratio + phaseTick * 1.75) * amp +
-        Math.sin(x * 0.18 + phaseTick * 5.0) * jitterMod;
-      const y = h / 2 + harmonic;
+        Math.sin(x * 0.045 * f0Ratio + phaseTick * 1.8) * amp +
+        Math.sin(x * 0.19 + phaseTick * 5.2) * jitterMod;
+      const y = height / 2 + harmonic;
       if (x === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
@@ -483,22 +548,23 @@ function drawHiDpiOscilloscope(canvas, liveSample) {
   ctx.stroke();
 }
 
-function drawHiDpiSpectrogram(canvas, liveSample) {
-  const { ctx, width: w, height: h } = configureHiDpiCanvas(canvas);
-  ctx.fillStyle = "#050608";
-  ctx.fillRect(0, 0, w, h);
+/**
+ * Renders the Fast Fourier Transform (FFT) spectral density bar graph.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} width
+ * @param {number} height
+ * @param {Object|null} liveSample
+ */
+function drawPrimarySpectrogram(ctx, width, height, liveSample) {
+  ctx.fillStyle = "#04070d";
+  ctx.fillRect(0, 0, width, height);
 
-  ctx.strokeStyle = "#10141f";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, h * 0.5);
-  ctx.lineTo(w, h * 0.5);
-  ctx.stroke();
-
-  const barCount = 52;
-  const gap = 2;
-  const barWidth = (w - gap * (barCount - 1)) / barCount;
-  const peakBin = Math.min(barCount - 4, Math.max(3, Math.round((currentTelemetry.f0Hz / 500) * 28)));
+  const barCount = 48;
+  const barWidth = width / barCount - 2;
+  const peakBin = Math.min(
+    barCount - 4,
+    Math.max(3, Math.round((currentTelemetry.f0Hz / 500) * 26))
+  );
 
   for (let i = 0; i < barCount; i++) {
     let magnitude = 0;
@@ -507,23 +573,26 @@ function drawHiDpiSpectrogram(canvas, liveSample) {
     } else {
       const dist = Math.abs(i - peakBin);
       magnitude = Math.max(
-        0.07,
+        0.08,
         Math.exp(-(dist * dist) / (currentTelemetry.jitterPercent > 2 ? 18 : 8)) *
           (currentTelemetry.dbSpl / 100)
       );
     }
 
-    const barHeight = Math.min(h - 8, magnitude * (h - 10));
+    const barHeight = Math.min(height - 8, magnitude * (height - 10));
     ctx.fillStyle =
       i === peakBin
-        ? "#ff2e4c"
+        ? "#ef4444"
         : currentTelemetry.jitterPercent >= 2.0
-        ? "#ffb020"
-        : "#00b8ff";
-    ctx.fillRect(i * (barWidth + gap), h - barHeight, barWidth, barHeight);
+        ? "#f59e0b"
+        : "#38bdf8";
+    ctx.fillRect(i * (barWidth + 2), height - barHeight, barWidth, barHeight);
   }
 }
 
+/**
+ * Starts the Indian Standard Time (IST) synchronized header clock.
+ */
 function startClock() {
   const clockEl = document.getElementById("istClockReadout");
   if (!clockEl) return;
@@ -538,9 +607,12 @@ function startClock() {
   setInterval(update, 1000);
 }
 
+/**
+ * Exports the latest structured ERSS-112 incident audit packet as a downloadable JSON file.
+ */
 function exportIncidentJson() {
   const payload = lastAuditPacket || {
-    system: "DHVANI-CAD v3.2.0",
+    system: "DHVANI-CAD",
     status: "ERSS_NOMINAL_STANDBY",
     psapNode: "AP-GNT-NAMBURU-04",
     timestamp: new Date().toISOString(),
@@ -548,10 +620,10 @@ function exportIncidentJson() {
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `DHVANI_ERSS112_INCIDENT_${Date.now()}.json`;
-  a.click();
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `DHVANI_ERSS112_INCIDENT_${Date.now()}.json`;
+  anchor.click();
   URL.revokeObjectURL(url);
 }
 
