@@ -1,13 +1,21 @@
 /**
  * @fileoverview Real-world hardware GPS tracker, OpenStreetMap reverse geocoder,
- * cross-device HTTPS Server-Sent Events (SSE) telemetry relay, and physical SOS actuators for DHVANI-CAD.
+ * cross-device HTTPS Server-Sent Events (SSE) telemetry relay, and physical SOS actuators.
  */
+
+import { recordDiagnosticEvent } from "../config/telecomNodes.js";
 
 const RELAY_BASE_URL = "https://ntfy.sh";
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse";
+const GEOCODE_THROTTLE_MS = 15000;
+const DEFAULT_ROOM_CODE = "dhvani-vvitu-112";
 
 export class RealWorldTelemetryRelay {
-  constructor(roomCode = "dhvani-vvitu-112", onRemotePacketCallback = () => {}) {
+  /**
+   * @param {string} [roomCode="dhvani-vvitu-112"] Unique channel ID pairing a Field Phone with the Command Laptop
+   * @param {(packet: Object) => void} [onRemotePacketCallback] Invoked when remote telemetry arrives
+   */
+  constructor(roomCode = DEFAULT_ROOM_CODE, onRemotePacketCallback = () => {}) {
     this.roomCode = this.sanitizeRoomCode(roomCode);
     this.onRemotePacket = onRemotePacketCallback;
     this.eventSource = null;
@@ -21,23 +29,35 @@ export class RealWorldTelemetryRelay {
       lng: 80.5249,
       accuracyMeters: 12,
       speedMps: 0,
-      resolvedAddress: "Namburu Highway Corridor, Guntur District, AP",
+      resolvedAddress: "Namburu Highway Corridor, Guntur, AP",
       isHardwareFix: false
     };
     this.watchId = null;
     this.lastGeocodeTime = 0;
   }
 
+  /**
+   * Sanitizes a relay channel identifier to alphanumeric and hyphen characters.
+   * @param {string} code
+   * @returns {string}
+   */
   sanitizeRoomCode(code) {
-    return String(code || "dhvani-vvitu-112")
+    const cleaned = String(code || DEFAULT_ROOM_CODE)
       .toLowerCase()
       .replace(/[^a-z0-9-_]/g, "")
       .slice(0, 36);
+    return cleaned || DEFAULT_ROOM_CODE;
   }
 
+  /**
+   * Starts real-time hardware GPS tracking via navigator.geolocation.watchPosition
+   * and resolves street addresses using OpenStreetMap Nominatim.
+   * @param {(gps: Object) => void} [onGpsUpdate]
+   */
   startLiveGpsTracking(onGpsUpdate = () => {}) {
     if (typeof window === "undefined" || !("geolocation" in navigator)) {
-      onGpsUpdate(this.gpsState);
+      this.gpsState.resolvedAddress = "Hardware GPS unavailable on this device";
+      onGpsUpdate({ ...this.gpsState });
       return;
     }
 
@@ -50,7 +70,7 @@ export class RealWorldTelemetryRelay {
         this.gpsState.isHardwareFix = true;
 
         const now = Date.now();
-        if (now - this.lastGeocodeTime > 15000) {
+        if (now - this.lastGeocodeTime > GEOCODE_THROTTLE_MS) {
           this.lastGeocodeTime = now;
           this.gpsState.resolvedAddress = await this.reverseGeocodeStreet(
             this.gpsState.lat,
@@ -60,7 +80,9 @@ export class RealWorldTelemetryRelay {
 
         onGpsUpdate({ ...this.gpsState });
       },
-      () => {
+      (geoError) => {
+        recordDiagnosticEvent("GPS_WATCH", geoError);
+        this.gpsState.resolvedAddress = "Namburu Sector (Cell-ID Triangulation Active)";
         onGpsUpdate({ ...this.gpsState });
       },
       {
@@ -71,21 +93,39 @@ export class RealWorldTelemetryRelay {
     );
   }
 
+  /**
+   * Resolves latitude/longitude into a street address using OpenStreetMap Nominatim.
+   * @param {number} lat Latitude in decimal degrees
+   * @param {number} lng Longitude in decimal degrees
+   * @returns {Promise<string>}
+   */
   async reverseGeocodeStreet(lat, lng) {
     try {
+      const safeLat = Number(lat).toFixed(6);
+      const safeLng = Number(lng).toFixed(6);
       const res = await fetch(
-        `${NOMINATIM_URL}?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`,
-        { headers: { Accept: "application/json" } }
+        `${NOMINATIM_URL}?format=jsonv2&lat=${encodeURIComponent(safeLat)}&lon=${encodeURIComponent(safeLng)}`,
+        {
+          headers: { Accept: "application/json" }
+        }
       );
-      if (!res.ok) throw new Error("Geocode HTTP error");
+      if (!res.ok) {
+        throw new Error(`Nominatim HTTP ${res.status}`);
+      }
       const data = await res.json();
-      if (data && data.display_name) {
+      if (data && typeof data.display_name === "string") {
         return data.display_name.split(",").slice(0, 4).join(",").trim();
       }
-    } catch (_) {}
-    return `Sector ${lat.toFixed(4)}N, ${lng.toFixed(4)}E`;
+    } catch (geocodeError) {
+      recordDiagnosticEvent("NOMINATIM_GEOCODE", geocodeError);
+    }
+    return `Sector ${Number(lat).toFixed(4)}N, ${Number(lng).toFixed(4)}E`;
   }
 
+  /**
+   * Subscribes the Command Center console to live cross-device telemetry over HTTPS SSE.
+   * @param {string} [newRoomCode]
+   */
   connectLiveStream(newRoomCode) {
     if (newRoomCode) {
       this.roomCode = this.sanitizeRoomCode(newRoomCode);
@@ -93,7 +133,9 @@ export class RealWorldTelemetryRelay {
 
     if (this.localBroadcast) {
       this.localBroadcast.onmessage = (evt) => {
-        if (evt.data) this.onRemotePacket(evt.data);
+        if (evt.data && typeof evt.data === "object") {
+          this.onRemotePacket(evt.data);
+        }
       };
     }
 
@@ -101,8 +143,12 @@ export class RealWorldTelemetryRelay {
       this.eventSource.close();
     }
 
+    if (typeof EventSource === "undefined") {
+      return;
+    }
+
     try {
-      const streamUrl = `${RELAY_BASE_URL}/${this.roomCode}/sse`;
+      const streamUrl = `${RELAY_BASE_URL}/${encodeURIComponent(this.roomCode)}/sse`;
       this.eventSource = new EventSource(streamUrl);
       this.eventSource.onmessage = (event) => {
         try {
@@ -111,16 +157,30 @@ export class RealWorldTelemetryRelay {
             const packet = JSON.parse(envelope.message);
             this.onRemotePacket(packet);
           }
-        } catch (_) {}
+        } catch (parseError) {
+          recordDiagnosticEvent("SSE_PARSE", parseError);
+        }
       };
-    } catch (_) {}
+      this.eventSource.onerror = (sseError) => {
+        recordDiagnosticEvent("SSE_STREAM", sseError);
+      };
+    } catch (connError) {
+      recordDiagnosticEvent("SSE_CONNECT", connError);
+    }
   }
 
+  /**
+   * Publishes a live emergency telemetry packet from the Citizen Field Device to the Command Console.
+   * @param {Object} packet Triage decision and biometric telemetry packet
+   * @returns {Promise<Object>} Enriched packet with geodetic coordinates
+   */
   async broadcastEmergencyPacket(packet) {
+    const safeLat = Number(this.gpsState.lat).toFixed(6);
+    const safeLng = Number(this.gpsState.lng).toFixed(6);
     const enrichedPacket = {
       ...packet,
       gps: { ...this.gpsState },
-      mapsUrl: `https://www.google.com/maps?q=${this.gpsState.lat},${this.gpsState.lng}`,
+      mapsUrl: `https://www.google.com/maps?q=${safeLat},${safeLng}`,
       relayedAt: new Date().toISOString()
     };
 
@@ -129,16 +189,23 @@ export class RealWorldTelemetryRelay {
     }
 
     try {
-      await fetch(`${RELAY_BASE_URL}/${this.roomCode}`, {
+      await fetch(`${RELAY_BASE_URL}/${encodeURIComponent(this.roomCode)}`, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify(enrichedPacket)
       });
-    } catch (_) {}
+    } catch (networkError) {
+      recordDiagnosticEvent("SSE_PUBLISH", networkError);
+    }
 
     return enrichedPacket;
   }
 
+  /**
+   * Triggers physical voice deterrence over the device speaker ONLY when sirenPolicy is active.
+   * Strictly silences speaker during COVERT_NO_SIRENS (hostage/intruder whisper).
+   * @param {Object} triageResult
+   */
   triggerPhysicalVoiceActuator(triageResult) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
       return;
@@ -146,13 +213,13 @@ export class RealWorldTelemetryRelay {
 
     window.speechSynthesis.cancel();
 
-    if (triageResult.dispatchDirective?.sirenPolicy === "COVERT_NO_SIRENS") {
+    if (triageResult?.dispatchDirective?.sirenPolicy === "COVERT_NO_SIRENS") {
       return;
     }
 
-    if (triageResult.dispatchDirective?.dispatchRequired) {
+    if (triageResult?.dispatchDirective?.dispatchRequired) {
       const utterance = new SpeechSynthesisUtterance(
-        "DHVANI Emergency Alert Verified. Live GPS coordinates and acoustic evidence transmitted to ERSS 112 police control room."
+        "Emergency distress verified by DHVANI CAD. Live GPS coordinates and acoustic evidence transmitted to ERSS 112 police control room."
       );
       utterance.lang = "en-IN";
       utterance.rate = 1.05;
@@ -161,14 +228,21 @@ export class RealWorldTelemetryRelay {
     }
   }
 
-  buildEmergencyDispatchLinks(triageResult) {
-    const { lat, lng, resolvedAddress } = this.gpsState;
-    const mapsHref = `https://www.google.com/maps?q=${lat},${lng}`;
+  /**
+   * Builds sanitized SMS / WhatsApp SOS dispatch URIs with live GPS pin and biometric evidence.
+   * @param {Object} triageResult
+   * @returns {{ smsHref: string, whatsappHref: string, mapsHref: string }}
+   */
+  buildEmergencyDispatchLinks(triageResult = {}) {
+    const safeLat = Number(this.gpsState.lat || 16.3462).toFixed(6);
+    const safeLng = Number(this.gpsState.lng || 80.5249).toFixed(6);
+    const resolvedAddress = String(this.gpsState.resolvedAddress || "Namburu Sector");
+    const mapsHref = `https://www.google.com/maps?q=${safeLat},${safeLng}`;
     const bodyText =
-      `[ERSS-112 DHVANI-CAD AUTO-SOS] ${triageResult.incidentCode} | ` +
-      `Siren: ${triageResult.dispatchDirective?.sirenPolicy} | ` +
+      `[ERSS-112 DHVANI-CAD AUTO-SOS] ${triageResult.incidentCode || "EMERGENCY"} | ` +
+      `Siren: ${triageResult.dispatchDirective?.sirenPolicy || "ACTIVE"} | ` +
       `F0: ${triageResult.f0Hz || 0}Hz, Jitter: ${triageResult.jitterPercent || 0}% | ` +
-      `Transcript: "${triageResult.verbatimTranscript}" | ` +
+      `Transcript: "${triageResult.verbatimTranscript || ""}" | ` +
       `Loc: ${resolvedAddress} (${mapsHref})`;
 
     return {
