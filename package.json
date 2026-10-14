@@ -1,0 +1,30 @@
+{
+  "name": "dhvani-erss-cad",
+  "version": "3.2.0",
+  "description": "DHVANI-CAD: AI-powered Public Safety, Smart City & Emergency Response acoustic biometric triage platform using Google Gemini and Web Audio DSP to address real-world community safety challenges.",
+  "type": "module",
+  "scripts": {
+    "start": "npx serve . -l 3000",
+    "dev": "npx serve . -l 3000",
+    "test": "node --test tests/triageEngine.test.js"
+  },
+  "keywords": [
+    "dhvani-cad",
+    "public-safety-and-emergency-response",
+    "smart-cities-and-transportation",
+    "healthcare-and-community-wellness",
+    "citizen-engagement-and-public-services",
+    "accessibility-and-inclusive-communities",
+    "google-gemini",
+    "google-ai-studio",
+    "vertex-ai",
+    "intelligent-automation",
+    "erss-112",
+    "acoustic-dsp"
+  ],
+  "author": "Shaik Mahammad Ali",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
