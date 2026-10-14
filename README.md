@@ -54,12 +54,3 @@ Implemented in `src/dsp/acousticAnalyzer.js` and `src/core/triageEngine.js` usin
 
 ---
 
-## 5. Verification & Deployment
-
-```bash
-# Execute the 6 automated unit tests (Node built-in test runner)
-npm test
-
-# Start local production server on port 3000
-npm start
-```
