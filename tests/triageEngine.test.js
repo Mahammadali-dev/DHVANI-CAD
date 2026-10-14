@@ -12,6 +12,7 @@ import {
   computeGlottalJitterPercent
 } from "../src/dsp/acousticAnalyzer.js";
 import { evaluateDhvaniTriage, INCIDENT_CODES } from "../src/core/triageEngine.js";
+import { recordDiagnosticEvent, getDiagnosticEvents } from "../src/config/telecomNodes.js";
 
 test("DSP Suite: computeRMSDecibels and computeZeroCrossingRate calculate accurate signal metrics", () => {
   const sampleRate = 48000;
@@ -42,7 +43,7 @@ test("DSP Suite: computeGlottalJitterPercent distinguishes stable vs pathologica
   assert.ok(tremorJitter > 3.0, `Panicked vocal tremor should exceed 3.0%, got ${tremorJitter}%`);
 });
 
-test("DHVANI False-Positive Filter: High-threat Telugu/English keywords with calm vocal biometrics are suppressed", () => {
+test("False-Positive Joke Filter: High-threat Telugu/English keywords with calm vocal biometrics are suppressed", () => {
   const decision = evaluateDhvaniTriage({
     transcript: "Rey mama kapadandra, ee exam nannu champesthundi, help me bro!",
     f0Hz: 142.0,
@@ -98,4 +99,19 @@ test("Non-Verbal Highway MVA: High-energy impact acoustics trigger 108 trauma di
 
   assert.equal(decision.incidentCode, INCIDENT_CODES.MEDICAL_MVA);
   assert.equal(decision.dispatchDirective.dispatchRequired, true);
+});
+
+test("Boundary & Input Sanitization: Gracefully handles null, empty, or out-of-range inputs", () => {
+  const emptyDecision = evaluateDhvaniTriage();
+  assert.equal(emptyDecision.incidentCode, INCIDENT_CODES.NOMINAL_TRAFFIC);
+  assert.equal(computeRMSDecibels(null).rms, 0);
+  assert.equal(computeZeroCrossingRate([]), 0);
+  assert.equal(estimateFundamentalFrequencyF0(new Float32Array(10)).f0Hz, 0);
+});
+
+test("Diagnostic Ring Buffer: Captures structured operational telemetry without memory leaks", () => {
+  const entry = recordDiagnosticEvent("UNIT_TEST", new Error("Simulated test diagnostic"));
+  assert.equal(entry.moduleName, "UNIT_TEST");
+  const history = getDiagnosticEvents();
+  assert.ok(history.length >= 1);
 });
