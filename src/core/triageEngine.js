@@ -4,6 +4,8 @@
  * glottal jitter and F0 pitch elevation to eliminate false positives while catching covert distress.
  */
 
+import { SYSTEM_CONSTANTS } from "../config/telecomNodes.js";
+
 export const INCIDENT_CODES = Object.freeze({
   CRITICAL_DISPATCH: "ERSS_P1_CRITICAL_DISPATCH",
   SILENT_INTERVENTION: "ERSS_P1_SILENT_INTERVENTION",
@@ -11,6 +13,8 @@ export const INCIDENT_CODES = Object.freeze({
   FALSE_POSITIVE: "ERSS_FALSE_POSITIVE_BENIGN",
   NOMINAL_TRAFFIC: "ERSS_NOMINAL_STANDBY"
 });
+
+const MAX_TRANSCRIPT_CHARS = 600;
 
 const LEXICON_VECTORS = Object.freeze([
   { term: "kapadandi", weight: 48, lang: "te-IN" },
@@ -33,28 +37,37 @@ const LEXICON_VECTORS = Object.freeze([
   { term: "kill", weight: 36, lang: "en-IN" }
 ]);
 
+/**
+ * Computes lexical threat score and matched keywords from a transcript string.
+ * @param {string} [transcript=""] Input speech transcript
+ * @returns {{ keywordIndex: number, matchedTerms: string[], detectedLanguage: string }}
+ */
 export function scoreSemanticLexicon(transcript = "") {
   const normalized = String(transcript || "").toLowerCase().trim();
   if (!normalized) {
-    return { keywordIndex: 0, matchedTerms: [], detectedLanguage: "Non-Verbal / Acoustic Only" };
+    return {
+      keywordIndex: 0,
+      matchedTerms: [],
+      detectedLanguage: "Non-Verbal / Acoustic Biometric Only"
+    };
   }
 
   let rawScore = 0;
   const matchedTerms = [];
-  const langs = new Set();
+  const detectedLangs = new Set();
 
   for (const entry of LEXICON_VECTORS) {
     if (normalized.includes(entry.term)) {
       rawScore += entry.weight;
       matchedTerms.push(entry.term);
-      langs.add(entry.lang);
+      detectedLangs.add(entry.lang);
     }
   }
 
   const detectedLanguage =
-    langs.size > 1
+    detectedLangs.size > 1
       ? "Bilingual te-IN / en-IN"
-      : langs.has("te-IN")
+      : detectedLangs.has("te-IN")
       ? "te-IN (Telugu)"
       : "en-IN (English)";
 
@@ -67,16 +80,28 @@ export function scoreSemanticLexicon(transcript = "") {
 
 /**
  * Evaluates multimodal acoustic telemetry and semantic transcript using the DHVANI Dual-Threshold Gate.
- * @param {Object} input
- * @returns {Object} Structured ERSS-112 triage decision packet
+ * @param {Object} [input={}] Telemetry and transcript frame
+ * @param {string} [input.transcript] Speech transcript
+ * @param {number} [input.f0Hz] Fundamental frequency in Hz
+ * @param {number} [input.jitterPercent] Relative glottal jitter percentage
+ * @param {number} [input.dbSpl] Sound pressure level in dB
+ * @param {number} [input.zcr] Zero-crossing rate (0.0 to 1.0)
+ * @param {string[]} [input.backgroundTags] Detected environmental acoustic tags
+ * @returns {Object} Structured NG-ERSS 112 triage decision packet
  */
 export function evaluateDhvaniTriage(input = {}) {
-  const transcript = typeof input.transcript === "string" ? input.transcript.slice(0, 600) : "";
-  const f0Hz = Number.isFinite(input.f0Hz) ? Math.max(0, input.f0Hz) : 135;
-  const jitterPercent = Number.isFinite(input.jitterPercent) ? Math.max(0, input.jitterPercent) : 0.55;
-  const dbSpl = Number.isFinite(input.dbSpl) ? Math.max(20, input.dbSpl) : 60;
-  const zcr = Number.isFinite(input.zcr) ? Math.max(0, input.zcr) : 0.06;
-  const backgroundTags = Array.isArray(input.backgroundTags) ? input.backgroundTags : [];
+  const safeInput = input && typeof input === "object" ? input : {};
+  const transcript =
+    typeof safeInput.transcript === "string"
+      ? safeInput.transcript.slice(0, MAX_TRANSCRIPT_CHARS)
+      : "";
+  const f0Hz = Number.isFinite(safeInput.f0Hz) ? Math.max(0, safeInput.f0Hz) : 135;
+  const jitterPercent = Number.isFinite(safeInput.jitterPercent)
+    ? Math.max(0, safeInput.jitterPercent)
+    : 0.55;
+  const dbSpl = Number.isFinite(safeInput.dbSpl) ? Math.max(20, safeInput.dbSpl) : 60;
+  const zcr = Number.isFinite(safeInput.zcr) ? Math.max(0, safeInput.zcr) : 0.06;
+  const backgroundTags = Array.isArray(safeInput.backgroundTags) ? safeInput.backgroundTags : [];
 
   const { keywordIndex, matchedTerms, detectedLanguage } = scoreSemanticLexicon(transcript);
 
@@ -85,10 +110,12 @@ export function evaluateDhvaniTriage(input = {}) {
   const intensityStress = dbSpl > 82 ? Math.min(100, ((dbSpl - 75) / 25) * 100) : 15;
 
   const isCovertWhisper =
-    dbSpl <= 48 && jitterPercent >= 2.3 && (zcr >= 0.17 || keywordIndex >= 40);
+    dbSpl <= SYSTEM_CONSTANTS.WHISPER_SPL_CEILING_DB &&
+    jitterPercent >= SYSTEM_CONSTANTS.PATHOLOGICAL_JITTER_PCT &&
+    (zcr >= SYSTEM_CONSTANTS.FRICATIVE_ZCR_THRESHOLD || keywordIndex >= 40);
 
   const hasCrashAcoustics =
-    backgroundTags.some((t) => /shatter|skid|impact|crash|metallic/i.test(t)) ||
+    backgroundTags.some((tag) => /shatter|skid|impact|crash|metallic/i.test(String(tag))) ||
     (dbSpl >= 90 && zcr >= 0.25 && jitterPercent >= 2.5);
 
   let vocalStressIndex = Math.round(
@@ -103,51 +130,51 @@ export function evaluateDhvaniTriage(input = {}) {
   }
   vocalStressIndex = Math.min(100, Math.max(0, vocalStressIndex));
 
-  const paralinguisticMarkers = [];
-  if (f0Hz >= 270) {
-    paralinguisticMarkers.push(`Elevated F0 Pitch (${f0Hz.toFixed(1)} Hz > 220 Hz norm)`);
-  } else {
-    paralinguisticMarkers.push(`Nominal F0 Pitch (${f0Hz.toFixed(1)} Hz)`);
-  }
+  const paralinguisticMarkers = buildParalinguisticMarkers(
+    f0Hz,
+    jitterPercent,
+    dbSpl,
+    zcr,
+    isCovertWhisper
+  );
 
-  if (jitterPercent >= 1.8) {
-    paralinguisticMarkers.push(`Pathological Glottal Jitter (${jitterPercent.toFixed(2)}% > 1.04% clinical norm)`);
-  } else {
-    paralinguisticMarkers.push(`Stable Glottal Periodicity (${jitterPercent.toFixed(2)}% Jitter)`);
-  }
-
-  if (isCovertWhisper) {
-    paralinguisticMarkers.push(`Covert Unvoiced Whisper Signature (${dbSpl.toFixed(1)} dB SPL, ZCR ${zcr.toFixed(3)})`);
-  }
-
-  // CASE 1: False Positive / Casual Joke Filter (High danger words, low biometric vocal stress)
+  // CASE 1: False-Positive Joke Filter (High lexical threat words, calm glottal biometrics)
   if (keywordIndex >= 40 && vocalStressIndex < 38 && jitterPercent < 1.35 && !isCovertWhisper) {
-    const suppressedScore = Math.min(34, Math.round(vocalStressIndex * 0.65 + keywordIndex * 0.15));
+    const suppressedScore = Math.min(
+      34,
+      Math.round(vocalStressIndex * 0.65 + keywordIndex * 0.15)
+    );
     return {
       incidentCode: INCIDENT_CODES.FALSE_POSITIVE,
       detectedLanguage,
-      verbatimTranscript: transcript || "[Calm speech]",
+      verbatimTranscript: transcript || "[Calm conversational speech]",
       matchedKeywords: matchedTerms,
       keywordIndex,
       vocalStressIndex,
       compositeThreatScore: suppressedScore,
       paralinguisticMarkers: [
         ...paralinguisticMarkers,
-        "Semantic-Biometric Mismatch: High-threat lexicon spoken with calm glottal stability"
+        "Semantic-Biometric Mismatch: Trigger lexicon spoken with calm glottal periodicity"
       ],
-      acousticEnvironment: backgroundTags.length ? backgroundTags : ["Benign Conversational Background"],
+      acousticEnvironment: backgroundTags.length
+        ? backgroundTags
+        : ["Benign Conversational Environment"],
       dispatchDirective: {
         dispatchRequired: false,
         unitCallsign: "NONE // SUPPRESSED",
         sirenPolicy: "STANDBY",
-        tacticalBrief: "False positive filtered. Distress keywords detected without involuntary vocal stress markers."
+        tacticalBrief:
+          "False positive suppressed. Distress keywords detected without involuntary vocal tremor."
       }
     };
   }
 
   // CASE 2: Covert Hostage / Domestic Intruder Whisper
   if (isCovertWhisper && (keywordIndex >= 35 || jitterPercent >= 3.0)) {
-    const compositeThreatScore = Math.min(99, Math.max(88, Math.round(vocalStressIndex * 0.65 + keywordIndex * 0.35)));
+    const compositeThreatScore = Math.min(
+      99,
+      Math.max(88, Math.round(vocalStressIndex * 0.65 + keywordIndex * 0.35))
+    );
     return {
       incidentCode: INCIDENT_CODES.SILENT_INTERVENTION,
       detectedLanguage,
@@ -157,19 +184,25 @@ export function evaluateDhvaniTriage(input = {}) {
       vocalStressIndex,
       compositeThreatScore,
       paralinguisticMarkers,
-      acousticEnvironment: backgroundTags.length ? backgroundTags : ["Low-dB Indoor Covert Environment"],
+      acousticEnvironment: backgroundTags.length
+        ? backgroundTags
+        : ["Low-dB Indoor Covert Environment"],
       dispatchDirective: {
         dispatchRequired: true,
         unitCallsign: "PCR-GNT-14 (TACTICAL INTERCEPT)",
         sirenPolicy: "COVERT_NO_SIRENS",
-        tacticalBrief: "Caller is whispering under extreme vocal tremor. Approach sector with sirens and beacons OFF."
+        tacticalBrief:
+          "Caller whispering under acute vocal tremor. Dispatch patrol with sirens and beacons OFF."
       }
     };
   }
 
-  // CASE 3: High-Impact Vehicular Collision / Non-Verbal Acoustic Emergency
+  // CASE 3: High-Impact Vehicular Collision / Non-Verbal Medical Emergency
   if (hasCrashAcoustics && vocalStressIndex >= 75) {
-    const compositeThreatScore = Math.min(98, Math.max(85, Math.round(vocalStressIndex * 0.8 + keywordIndex * 0.2 + 10)));
+    const compositeThreatScore = Math.min(
+      98,
+      Math.max(85, Math.round(vocalStressIndex * 0.8 + keywordIndex * 0.2 + 10))
+    );
     return {
       incidentCode: INCIDENT_CODES.MEDICAL_MVA,
       detectedLanguage,
@@ -184,7 +217,8 @@ export function evaluateDhvaniTriage(input = {}) {
         dispatchRequired: true,
         unitCallsign: "108-AMB-NMB-02 + PCR-GNT-14",
         sirenPolicy: "PRIORITY_1_ACTIVE_SIRENS",
-        tacticalBrief: "High-energy vehicular impact signature verified. Dispatch ALS trauma ambulance and highway patrol."
+        tacticalBrief:
+          "High-energy vehicular impact signature verified. Dispatch 108 trauma ambulance and highway patrol."
       }
     };
   }
@@ -194,7 +228,7 @@ export function evaluateDhvaniTriage(input = {}) {
   const synergyBoost = keywordIndex >= 50 && vocalStressIndex >= 65 ? 14 : 0;
   const compositeThreatScore = Math.min(100, rawComposite + synergyBoost);
 
-  if (compositeThreatScore >= 78) {
+  if (compositeThreatScore >= SYSTEM_CONSTANTS.DISPATCH_COMPOSITE_THRESHOLD) {
     return {
       incidentCode: INCIDENT_CODES.CRITICAL_DISPATCH,
       detectedLanguage,
@@ -204,12 +238,15 @@ export function evaluateDhvaniTriage(input = {}) {
       vocalStressIndex,
       compositeThreatScore,
       paralinguisticMarkers,
-      acousticEnvironment: backgroundTags.length ? backgroundTags : ["High-Decibel Distress Environment"],
+      acousticEnvironment: backgroundTags.length
+        ? backgroundTags
+        : ["High-Decibel Distress Environment"],
       dispatchDirective: {
         dispatchRequired: true,
         unitCallsign: "PCR-GNT-14 (ERSS-112 RAPID RESPONSE)",
         sirenPolicy: "PRIORITY_1_ACTIVE_SIRENS",
-        tacticalBrief: "Dual-threshold verified: Bilingual distress lexicon confirmed by acute glottal tremor and F0 spike."
+        tacticalBrief:
+          "Dual-threshold verified: Bilingual distress lexicon confirmed by acute glottal tremor and F0 spike."
       }
     };
   }
@@ -228,7 +265,45 @@ export function evaluateDhvaniTriage(input = {}) {
       dispatchRequired: false,
       unitCallsign: "NONE",
       sirenPolicy: "STANDBY",
-      tacticalBrief: "Telemetry within normal conversational parameters. Continuing passive RAM ring-buffer scan."
+      tacticalBrief:
+        "Telemetry within nominal conversational bounds. Continuing passive RAM ring-buffer scan."
     }
   };
 }
+
+/**
+ * Formats clinical acoustic biometric markers for PSAP audit logs.
+ * @param {number} f0Hz
+ * @param {number} jitterPercent
+ * @param {number} dbSpl
+ * @param {number} zcr
+ * @param {boolean} isCovertWhisper
+ * @returns {string[]}
+ */
+function buildParalinguisticMarkers(f0Hz, jitterPercent, dbSpl, zcr, isCovertWhisper) {
+  const markers = [];
+  if (f0Hz >= 270) {
+    markers.push(
+      `Elevated F0 Pitch (${f0Hz.toFixed(1)} Hz > ${SYSTEM_CONSTANTS.NOMINAL_F0_UPPER_HZ} Hz norm)`
+    );
+  } else {
+    markers.push(`Nominal F0 Pitch (${f0Hz.toFixed(1)} Hz)`);
+  }
+
+  if (jitterPercent >= 1.8) {
+    markers.push(
+      `Pathological Glottal Jitter (${jitterPercent.toFixed(2)}% > ${SYSTEM_CONSTANTS.CLINICAL_JITTER_THRESHOLD_PCT}% norm)`
+    );
+  } else {
+    markers.push(`Stable Glottal Periodicity (${jitterPercent.toFixed(2)}% Jitter)`);
+  }
+
+  if (isCovertWhisper) {
+    markers.push(
+      `Covert Unvoiced Whisper Signature (${dbSpl.toFixed(1)} dB SPL, ZCR ${zcr.toFixed(3)})`
+    );
+  }
+  return markers;
+}
+
+export const evaluateShivaTriage = evaluateDhvaniTriage;
