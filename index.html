@@ -1,1324 +1,379 @@
 <!DOCTYPE html>
-<html class="dark" lang="en">
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <meta content="web_standard" name="shell-type" />
-  <title>DHVANI-CAD // 112 Emergency Voice &amp; Stress Triage Console</title>
-
-  <!-- Google Fonts & Material Symbols -->
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet" />
-
-  <!-- Real Interactive Map: Leaflet CSS & JS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://generativelanguage.googleapis.com https://ntfy.sh https://nominatim.openstreetmap.org;"
   />
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
-
-  <style>
-    @layer base {
-      html, body { margin: 0; padding: 0; }
-      body { overscroll-behavior: none; }
-      main > :first-child { margin-top: 0 !important; }
-      main > :last-child { margin-bottom: 0 !important; }
-    }
-    ::-webkit-scrollbar { display: none; }
-
-    /* Leaflet Dark CAD Customizations */
-    .leaflet-container {
-      background: #0a0e16 !important;
-      font-family: 'Inter', monospace !important;
-    }
-    .leaflet-control-attribution {
-      font-size: 8px !important;
-      background: rgba(15, 19, 28, 0.75) !important;
-      color: #8d90a0 !important;
-      padding: 1px 4px !important;
-    }
-    .leaflet-control-attribution a {
-      color: #b4c5ff !important;
-    }
-    .leaflet-popup-content-wrapper,
-    .leaflet-popup-tip {
-      background: #181c24 !important;
-      color: #dfe2ee !important;
-      border: 1px solid #31353e !important;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.65) !important;
-      border-radius: 8px !important;
-    }
-    .leaflet-popup-content {
-      margin: 8px 10px !important;
-      font-size: 11px !important;
-      line-height: 1.4 !important;
-    }
-
-    /* Pulsing Custom Map Markers */
-    .cad-marker-caller {
-      position: relative;
-      width: 18px;
-      height: 18px;
-    }
-    .cad-marker-caller .ring {
-      position: absolute;
-      inset: -8px;
-      border-radius: 9999px;
-      background: rgba(255, 46, 76, 0.35);
-      animation: cadPulse 1.4s infinite ease-out;
-    }
-    .cad-marker-caller .core {
-      position: absolute;
-      inset: 2px;
-      border-radius: 9999px;
-      background: #ff2e4c;
-      border: 2px solid #ffffff;
-      box-shadow: 0 0 10px #ff2e4c;
-    }
-
-    .cad-marker-patrol {
-      width: 16px;
-      height: 16px;
-      border-radius: 9999px;
-      background: #4edea3;
-      border: 2px solid #0a0e16;
-      box-shadow: 0 0 10px #4edea3;
-    }
-
-    .cad-marker-tower {
-      width: 12px;
-      height: 12px;
-      border-radius: 3px;
-      background: #b4c5ff;
-      border: 1.5px solid #0a0e16;
-      box-shadow: 0 0 8px #2563eb;
-    }
-
-    @keyframes cadPulse {
-      0% { transform: scale(0.6); opacity: 1; }
-      100% { transform: scale(2.2); opacity: 0; }
-    }
-  </style>
-
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script id="tailwind-config">
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            "on-surface-variant": "#c3c6d7",
-            "on-tertiary": "#68000a",
-            "secondary": "#4edea3",
-            "surface-container-highest": "#31353e",
-            "tertiary-container": "#cf2c30",
-            "on-tertiary-fixed": "#410004",
-            "primary": "#b4c5ff",
-            "on-surface": "#dfe2ee",
-            "outline": "#8d90a0",
-            "surface-tint": "#b4c5ff",
-            "on-error": "#690005",
-            "primary-container": "#2563eb",
-            "surface-container-lowest": "#0a0e16",
-            "tertiary-fixed": "#ffdad7",
-            "error-container": "#93000a",
-            "on-secondary-fixed-variant": "#005236",
-            "on-error-container": "#ffdad6",
-            "secondary-fixed": "#6ffbbe",
-            "surface": "#0f131c",
-            "on-primary": "#002a78",
-            "surface-dim": "#0f131c",
-            "on-tertiary-container": "#ffecea",
-            "inverse-surface": "#dfe2ee",
-            "surface-container-low": "#181c24",
-            "surface-variant": "#31353e",
-            "primary-fixed": "#dbe1ff",
-            "surface-bright": "#353942",
-            "secondary-fixed-dim": "#4edea3",
-            "primary-fixed-dim": "#b4c5ff",
-            "on-background": "#dfe2ee",
-            "secondary-container": "#00a572",
-            "surface-container": "#1c2028",
-            "on-secondary": "#003824",
-            "on-tertiary-fixed-variant": "#930013",
-            "outline-variant": "#434655",
-            "on-secondary-container": "#00311f",
-            "tertiary-fixed-dim": "#ffb3ad",
-            "on-primary-container": "#eeefff",
-            "background": "#0f131c",
-            "on-secondary-fixed": "#002113",
-            "tertiary": "#ffb3ad",
-            "inverse-primary": "#0053db",
-            "inverse-on-surface": "#2c3039",
-            "surface-container-high": "#262a33",
-            "on-primary-fixed-variant": "#003ea8",
-            "error": "#ffb4ab",
-            "on-primary-fixed": "#00174b"
-          },
-          borderRadius: {
-            DEFAULT: "0.125rem",
-            lg: "0.25rem",
-            xl: "0.5rem",
-            full: "0.75rem"
-          },
-          spacing: {
-            "space-lg": "1rem",
-            "margin-lg": "1.5rem",
-            "gutter-lg": "1rem",
-            "space-xs": "0.25rem",
-            "gutter": "0.75rem",
-            "space-sm": "0.5rem",
-            "margin": "1rem",
-            "space-md": "0.75rem",
-            "space-xl": "1.5rem"
-          },
-          fontFamily: {
-            "body-lg": ["Inter"],
-            "headline-md": ["Inter"],
-            "telemetry-data": ["Inter"],
-            "headline-sm": ["Inter"],
-            "label-md": ["Inter"],
-            "display-lg": ["Inter"],
-            "body-sm": ["Inter"],
-            "body-md": ["Inter"],
-            "label-sm": ["Inter"],
-            "headline-lg": ["Inter"]
-          },
-          fontSize: {
-            "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }],
-            "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.01em", fontWeight: "600" }],
-            "telemetry-data": ["13px", { lineHeight: "18px", letterSpacing: "-0.01em", fontWeight: "500" }],
-            "headline-sm": ["16px", { lineHeight: "24px", letterSpacing: "-0.005em", fontWeight: "600" }],
-            "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "500" }],
-            "display-lg": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "600" }],
-            "body-sm": ["12px", { lineHeight: "16px", fontWeight: "400" }],
-            "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }],
-            "label-sm": ["10px", { lineHeight: "14px", letterSpacing: "0.05em", fontWeight: "600" }],
-            "headline-lg": ["24px", { lineHeight: "32px", letterSpacing: "-0.015em", fontWeight: "600" }]
-          }
-        }
-      }
-    };
-  </script>
+  <meta
+    name="description"
+    content="DHVANI-CAD: Innovative AI-powered NG-ERSS 112 Acoustic Biometric & Live GPS Emergency Triage System for Public Safety, Smart Cities, and Community Wellness."
+  />
+  <title>DHVANI-CAD // NG-ERSS 112 Acoustic Biometric &amp; GPS Triage System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="./src/styles/cad.css" />
 </head>
+<body>
+  <a href="#mainConsole" class="skip-link">Skip to main emergency console</a>
 
-<body class="bg-surface-container-lowest font-body-md text-on-surface antialiased selection:bg-primary-container selection:text-on-primary-container">
-  <!-- TOP HEADER -->
-  <header class="fixed top-0 left-0 right-0 h-16 z-50 bg-surface-container-low border-b border-surface-container-high/60 backdrop-blur-md">
-    <div class="h-16 max-w-[1440px] mx-auto px-margin flex items-center justify-between gap-space-md">
-      <div class="flex items-center gap-space-md min-w-0">
-        <div class="flex items-center justify-center">
-          <span class="relative flex h-2.5 w-2.5">
-            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
-            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-secondary"></span>
-          </span>
-        </div>
-        <div class="inline-flex items-center px-space-xs py-0.5 rounded border border-surface-container-highest bg-surface-container text-primary font-mono text-[11px] font-semibold tracking-wider uppercase">
-          DHVANI-CAD // 112
-        </div>
-        <div class="h-4 w-px bg-surface-container-highest hidden sm:block"></div>
-        <div class="flex flex-col min-w-0">
-          <span class="font-headline-sm text-headline-sm text-on-surface truncate leading-tight">Emergency Voice &amp; Stress Triage Console</span>
-          <span class="font-label-sm text-label-sm text-on-surface-variant truncate font-mono" id="header-corridor-subtitle">Namburu / Guntur Emergency Corridor (AP Circle)</span>
-        </div>
+  <header class="cad-header" role="banner">
+    <div class="brand-cluster">
+      <span class="system-badge">DHVANI-CAD // NG-ERSS 112</span>
+      <div>
+        <h1 class="cad-title">DHVANI-CAD Acoustic Biometric &amp; Live GPS Triage Console</h1>
+        <p class="cad-subtitle" id="liveAddressHeader">
+          PUBLIC SAFETY &amp; SMART CITY TELEMETRY // AP CIRCLE MCC-MNC 404-73
+        </p>
       </div>
+    </div>
 
-      <nav class="hidden xl:flex items-center gap-space-xs font-telemetry-data text-telemetry-data">
-        <a aria-current="page" class="px-space-sm py-1.5 rounded transition-colors bg-surface-container-highest text-primary font-semibold" href="#step1-col">Live Triage</a>
-        <a class="px-space-sm py-1.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" href="#audit-trail-section">Incident Queue</a>
-        <a class="px-space-sm py-1.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" href="#step2-col">Voice Telemetry</a>
-        <a class="px-space-sm py-1.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors" href="#step3-col" id="nav-focus-map">Corridor GIS</a>
-      </nav>
-
-      <div class="flex items-center gap-space-xs">
-        <div class="hidden md:flex items-center gap-space-xs font-mono font-label-sm text-label-sm">
-          <div class="px-space-xs py-1 rounded bg-surface-container border border-surface-container-highest text-on-surface-variant flex items-center gap-1.5">
-            <span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
-            <span class="text-on-surface">Live Sync ID:</span>
-            <span class="text-primary">dhvani-vvitu-112</span>
-          </div>
-          <div class="px-space-xs py-1 rounded bg-surface-container border border-surface-container-highest text-on-surface-variant hidden lg:flex items-center gap-1.5">
-            <span class="text-on-surface">GPS Lock:</span>
-            <span id="header-gps-coords">16.3462° N, 80.5249° E</span>
-          </div>
-          <div class="px-space-xs py-1 rounded bg-surface-container border border-surface-container-highest text-on-surface-variant flex items-center gap-1.5">
-            <span class="text-on-surface">IST:</span>
-            <span class="text-secondary font-semibold" id="header-ist-clock">13:25:00</span>
-          </div>
-        </div>
-        <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0 ml-space-xs">
-          <span class="material-symbols-outlined text-on-primary text-[18px]">person</span>
-        </div>
+    <div class="telemetry-strip" role="region" aria-label="Live Network and Hardware Status">
+      <div class="telemetry-kv">
+        <span class="led led-nominal" id="headerSystemLed" aria-hidden="true"></span>
+        <label for="relayRoomInput">SYNC CHANNEL:</label>
+        <input
+          type="text"
+          id="relayRoomInput"
+          class="relay-room-input"
+          value="dhvani-vvitu-112"
+          aria-label="Cross-device live telemetry room code"
+        />
       </div>
+      <div class="telemetry-kv">
+        <span>HARDWARE GPS:</span>
+        <strong id="gpsFixBadge" class="mono-num">INITIALIZING</strong>
+      </div>
+      <div class="telemetry-kv">
+        <span>IST CLOCK:</span>
+        <strong id="istClockReadout" class="mono-num">--:--:--</strong>
+      </div>
+      <button
+        type="button"
+        class="btn-tactical"
+        id="openApiKeyModalBtn"
+        aria-haspopup="dialog"
+        aria-controls="apiKeyModal"
+      >
+        <span>[GEMINI-2.5 KEY]</span>
+      </button>
     </div>
   </header>
 
-  <!-- MAIN CONTENT -->
-  <main class="w-full pt-16 bg-surface-container-lowest min-h-screen">
-    <div class="max-w-[1440px] mx-auto px-margin py-space-md">
-      <div class="flex flex-col w-full text-on-surface">
-
-        <!-- Top Triage Command Status Ribbon -->
-        <div class="w-full mb-space-md bg-surface-container-low rounded-lg p-space-sm flex flex-wrap items-center justify-between gap-space-sm shadow-sm">
-          <div class="flex items-center gap-space-md">
-            <div class="flex items-center gap-2">
-              <span class="inline-block w-2.5 h-2.5 rounded-full bg-secondary animate-pulse" id="ribbon-status-dot"></span>
-              <span class="font-telemetry-data text-telemetry-data text-on-surface uppercase tracking-wider font-semibold">Active Acoustic Node // GNT-CENTRAL-04</span>
-            </div>
-            <div class="h-3 w-px bg-surface-container-highest hidden sm:block"></div>
-            <div class="hidden sm:flex items-center gap-space-xs font-mono font-label-md text-label-md text-on-surface-variant">
-              <span>Latency: <strong class="text-secondary font-semibold" id="ribbon-latency">14ms</strong></span>
-              <span>•</span>
-              <span>Bandwidth: <strong class="text-on-surface">48 kHz Dual-Channel</strong></span>
-              <span>•</span>
-              <span>Language Engine: <strong class="text-primary font-semibold">TE+EN Multilingual Acoustic Lexicon</strong></span>
-            </div>
-          </div>
-          <div class="flex items-center gap-space-xs">
-            <span class="font-mono font-label-sm text-label-sm px-space-xs py-0.5 rounded bg-surface-container text-on-surface-variant">NODE: AP-POL-GNT-112</span>
-            <span class="font-mono font-label-sm text-label-sm px-space-xs py-0.5 rounded bg-tertiary-container/30 text-tertiary border-0 font-semibold tracking-wide" id="ribbon-mode-badge">HOT STANDBY</span>
-          </div>
-        </div>
-
-        <!-- SECTION 1: MAIN 3-COLUMN WORKSPACE -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
-
-          <!-- LEFT COLUMN (Span 4 columns) — STEP 1 // AUDIO SOURCE -->
-          <div class="lg:col-span-4 flex flex-col gap-space-md" id="step1-col">
-            <div class="flex items-center justify-between">
-              <div>
-                <span class="font-mono text-label-sm text-primary uppercase tracking-widest block font-semibold">STEP 1 // AUDIO SOURCE</span>
-                <h2 class="font-headline-sm text-headline-sm text-on-surface mt-0.5">Speak Live or Pick a Scenario</h2>
-              </div>
-              <span class="bg-surface-container-highest text-on-surface-variant font-mono text-label-sm px-2.5 py-0.5 rounded uppercase font-semibold" id="step1-status-badge">ACTIVE</span>
-            </div>
-
-            <!-- Microphone Guardian Action Box -->
-            <div class="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm shadow-sm relative overflow-hidden">
-              <div class="flex items-center gap-space-sm">
-                <div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center shrink-0 text-primary">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                  </svg>
-                </div>
-                <div>
-                  <h3 class="font-headline-sm text-telemetry-data text-on-surface leading-tight font-semibold">Hands-Free Microphone Guardian</h3>
-                  <p class="font-body-sm text-body-sm text-on-surface-variant leading-snug mt-0.5">Measures real voice pitch in Hz and vocal tremor in English or Telugu</p>
-                </div>
-              </div>
-              <button class="w-full bg-secondary-container hover:bg-secondary text-surface-container-lowest font-headline-sm text-telemetry-data font-semibold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm" id="btn-live-mic" type="button">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"></path>
-                </svg>
-                <span>Start Live Microphone</span>
-              </button>
-            </div>
-
-            <!-- Preset Scenarios Stack -->
-            <div class="flex flex-col gap-space-sm">
-              <span class="font-mono font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Acoustic Presets (Benchmarking)</span>
-
-              <!-- Card 1: Prank Filter -->
-              <div class="scenario-card cursor-pointer bg-surface-container hover:bg-surface-container-high transition-colors rounded-xl p-3.5 space-y-1.5 shadow-sm relative" data-scenario="prank">
-                <div class="scenario-bar hidden absolute left-0 top-2 bottom-2 w-1 bg-primary-container rounded-r"></div>
-                <div class="flex items-center justify-between pl-1">
-                  <span class="font-headline-sm text-telemetry-data text-on-surface font-semibold">1. Casual Joke (Prank Filter)</span>
-                  <span class="bg-secondary/10 text-secondary font-mono text-label-sm px-2 py-0.5 rounded font-semibold">Blocks False Alarm</span>
-                </div>
-                <p class="font-body-sm text-body-sm italic text-on-surface-variant pl-1">"Rey mama kapadandra, ee exam nannu champesthundi, help me!"</p>
-                <p class="font-mono text-label-sm text-on-surface-variant/80 pl-1">Normal pitch (132 Hz), Jitter 0.62% — Zero emergency risk</p>
-              </div>
-
-              <!-- Card 2: Distress Scream (Default Active) -->
-              <div class="scenario-card cursor-pointer bg-surface-container-high rounded-xl p-3.5 space-y-1.5 shadow-sm relative" data-scenario="distress">
-                <div class="scenario-bar absolute left-0 top-2 bottom-2 w-1 bg-primary-container rounded-r"></div>
-                <div class="flex items-center justify-between pl-1">
-                  <span class="font-headline-sm text-telemetry-data text-on-surface font-semibold flex items-center gap-1.5">
-                    <span>2. Real Distress Scream</span>
-                    <span class="w-1.5 h-1.5 rounded-full bg-tertiary animate-ping"></span>
-                  </span>
-                  <span class="bg-error-container/80 text-error font-mono text-label-sm px-2 py-0.5 rounded font-bold animate-pulse">Dispatches Police</span>
-                </div>
-                <p class="font-body-sm text-body-sm font-medium text-on-surface pl-1">"Kapadandi! Somebody please help me!"</p>
-                <p class="font-mono text-label-sm text-on-surface-variant pl-1">Acoustic scream spike, 368.5 Hz, vocal tremor jitter 4.85%</p>
-              </div>
-
-              <!-- Card 3: Covert Whisper -->
-              <div class="scenario-card cursor-pointer bg-surface-container hover:bg-surface-container-high transition-colors rounded-xl p-3.5 space-y-1.5 shadow-sm relative" data-scenario="whisper">
-                <div class="scenario-bar hidden absolute left-0 top-2 bottom-2 w-1 bg-primary-container rounded-r"></div>
-                <div class="flex items-center justify-between pl-1">
-                  <span class="font-headline-sm text-telemetry-data text-on-surface font-semibold">3. Covert Whisper (Hiding)</span>
-                  <span class="bg-surface-container-highest text-primary font-mono text-label-sm px-2 py-0.5 rounded font-semibold">Silent Approach</span>
-                </div>
-                <p class="font-body-sm text-body-sm italic text-on-surface-variant pl-1">"(Whispering) Please help, someone broke into the house..."</p>
-                <p class="font-mono text-label-sm text-on-surface-variant/80 pl-1">Sub-vocal tremor verified (32 dB), intruder stealth dispatch</p>
-              </div>
-
-              <!-- Card 4: Highway Crash -->
-              <div class="scenario-card cursor-pointer bg-surface-container hover:bg-surface-container-high transition-colors rounded-xl p-3.5 space-y-1.5 shadow-sm relative" data-scenario="crash">
-                <div class="scenario-bar hidden absolute left-0 top-2 bottom-2 w-1 bg-primary-container rounded-r"></div>
-                <div class="flex items-center justify-between pl-1">
-                  <span class="font-headline-sm text-telemetry-data text-on-surface font-semibold">4. Highway Crash (108 Ambulance)</span>
-                  <span class="bg-tertiary-container/40 text-tertiary font-mono text-label-sm px-2 py-0.5 rounded font-bold">108 Trauma Alert</span>
-                </div>
-                <p class="font-body-sm text-body-sm text-on-surface-variant leading-snug pl-1">Detects tire skids, shattering glass, and pain groans on NH-16.</p>
-                <p class="font-mono text-label-sm text-on-surface-variant/80 pl-1">Acoustic crash signature + blunt vocal groans</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- CENTER COLUMN (Span 5 columns) — STEP 2 // VOICE BIOMETRIC ANALYSIS -->
-          <div class="lg:col-span-5 flex flex-col gap-space-md" id="step2-col">
-            <div class="flex items-center justify-between">
-              <div>
-                <span class="font-mono text-label-sm text-primary uppercase tracking-widest block font-semibold">STEP 2 // VOICE BIOMETRIC ANALYSIS</span>
-                <h2 class="font-headline-sm text-headline-sm text-on-surface mt-0.5">How DHVANI Verifies Real Danger</h2>
-              </div>
-              <span class="font-mono text-label-sm bg-surface-container text-primary px-2 py-0.5 rounded font-semibold" id="lang-detected-pill">Telugu + English</span>
-            </div>
-
-            <!-- Prominent Alert Verdict Banner -->
-            <div class="bg-error-container/40 rounded-xl p-space-md flex flex-col gap-1.5 shadow-sm transition-colors duration-300" id="verdict-banner">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                  <span class="relative flex h-3 w-3">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-error opacity-75" id="verdict-ping"></span>
-                    <span class="relative inline-flex rounded-full h-3 w-3 bg-error" id="verdict-dot"></span>
-                  </span>
-                  <span class="font-headline-sm text-telemetry-data font-bold text-on-error-container uppercase tracking-wide" id="verdict-title">EMERGENCY VERIFIED — PRIORITY 1 DISPATCH</span>
-                </div>
-                <span class="font-mono text-telemetry-data font-bold text-error" id="verdict-score">96% Threat Score</span>
-              </div>
-              <p class="font-body-sm text-body-sm text-on-error-container/90 leading-snug" id="verdict-desc">
-                Distress words ('Kapadandi / Help') matched with severe vocal cord tremor (4.85% Jitter) and elevated pitch (368.5 Hz).
-              </p>
-            </div>
-
-            <!-- Live Voice Waveform Monitor Box -->
-            <div class="bg-surface-container-lowest rounded-xl p-3 h-36 relative flex flex-col justify-between overflow-hidden shadow-inner">
-              <div class="flex items-center justify-between z-10">
-                <span class="font-mono text-label-sm text-on-surface-variant flex items-center gap-1.5 font-semibold">
-                  <span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
-                  Live Voice Waveform &amp; Tremor Monitor (48 kHz)
-                </span>
-                <button class="bg-surface-container-high hover:bg-surface-container-highest text-label-sm font-mono text-on-surface px-2.5 py-1 rounded flex items-center gap-1.5 transition-colors" id="btn-hear-tone" type="button">
-                  <svg class="w-3.5 h-3.5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                  </svg>
-                  <span id="hear-tone-label">Hear Signal Tone</span>
-                </button>
-              </div>
-
-              <!-- Center SVG Waveform Display -->
-              <div class="absolute inset-0 pt-7 pb-4 px-3 flex items-center">
-                <svg class="w-full h-full" preserveAspectRatio="none" viewBox="0 0 480 80">
-                  <line class="text-surface-container-highest/40" stroke="currentColor" stroke-dasharray="2 3" stroke-width="0.7" x1="0" x2="480" y1="20" y2="20"></line>
-                  <line class="text-surface-container-highest/60" stroke="currentColor" stroke-width="0.8" x1="0" x2="480" y1="40" y2="40"></line>
-                  <line class="text-surface-container-highest/40" stroke="currentColor" stroke-dasharray="2 3" stroke-width="0.7" x1="0" x2="480" y1="60" y2="60"></line>
-                  <line class="text-surface-container-highest/30" stroke="currentColor" stroke-dasharray="2 2" stroke-width="0.5" x1="120" x2="120" y1="0" y2="80"></line>
-                  <line class="text-surface-container-highest/30" stroke="currentColor" stroke-dasharray="2 2" stroke-width="0.5" x1="240" x2="240" y1="0" y2="80"></line>
-                  <line class="text-surface-container-highest/30" stroke="currentColor" stroke-dasharray="2 2" stroke-width="0.5" x1="360" x2="360" y1="0" y2="80"></line>
-                  <path id="wave-path-primary" class="text-tertiary-container" d="M0,40 Q15,38 30,40 T60,39 T90,42 T110,40 Q125,18 135,62 T150,12 T165,68 T180,8 T195,72 T210,14 T225,66 T240,22 T255,58 T270,30 T285,50 T300,38 Q320,10 335,70 T350,15 T365,64 T380,24 T395,54 T410,38 T430,41 T455,39 T480,40" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"></path>
-                  <path id="wave-path-secondary" class="text-tertiary" d="M0,40 Q15,40 30,41 T60,40 T90,41 T110,40 Q125,25 135,55 T150,20 T165,60 T180,18 T195,62 T210,24 T225,56 T240,30 T255,50 T270,36 T285,45 T300,40 Q320,20 335,60 T350,25 T365,55 T380,32 T395,48 T410,40 T430,40 T455,40 T480,40" fill="none" opacity="0.6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2"></path>
-                </svg>
-              </div>
-
-              <div class="flex items-center justify-between text-on-surface-variant font-mono text-[10px] z-10 px-1">
-                <span>0.0s</span>
-                <span>0.5s</span>
-                <span>1.0s (Peak Lock)</span>
-                <span>1.5s</span>
-                <span>2.0s</span>
-              </div>
-            </div>
-
-            <!-- 3-Column Metric Row -->
-            <div class="grid grid-cols-3 gap-3">
-              <div class="bg-surface-container rounded-lg p-3 flex flex-col justify-between shadow-sm">
-                <span class="text-label-sm font-label-sm text-on-surface-variant">Voice Pitch (F0)</span>
-                <div class="font-mono text-headline-md text-tertiary font-bold my-1" id="metric-pitch">368.5 Hz</div>
-                <span class="font-mono text-[11px] text-on-surface-variant" id="metric-pitch-sub">Normal: 85–220 Hz (+68%)</span>
-              </div>
-              <div class="bg-surface-container-high rounded-lg p-3 flex flex-col justify-between shadow-sm">
-                <span class="text-label-sm font-label-sm text-on-surface-variant">Voice Tremor (Jitter)</span>
-                <div class="font-mono text-headline-md text-error font-bold my-1" id="metric-jitter">4.85 %</div>
-                <span class="font-mono text-[11px] text-error font-semibold" id="metric-jitter-sub">Calm: &lt; 1.20% (Panic)</span>
-              </div>
-              <div class="bg-surface-container rounded-lg p-3 flex flex-col justify-between shadow-sm">
-                <span class="text-label-sm font-label-sm text-on-surface-variant">Sound Level</span>
-                <div class="font-mono text-headline-md text-primary font-bold my-1" id="metric-db">94.2 dB</div>
-                <span class="font-mono text-[11px] text-on-surface-variant" id="metric-db-sub">Whisper: &lt; 48 dB (Scream)</span>
-              </div>
-            </div>
-
-            <!-- Dual-Check Filter Progress Card -->
-            <div class="bg-surface-container rounded-xl p-3.5 space-y-3 shadow-sm">
-              <div class="space-y-1">
-                <div class="flex items-center justify-between font-label-md text-label-md">
-                  <span class="text-on-surface font-medium">Check 1: Danger Words Spoken (Telugu / English)</span>
-                  <span class="font-mono text-primary font-semibold" id="check1-label">92% Confidence</span>
-                </div>
-                <div class="w-full h-2 rounded-full bg-surface-container-lowest overflow-hidden">
-                  <div class="h-full bg-primary rounded-full transition-all duration-500" id="check1-bar" style="width: 92%"></div>
-                </div>
-              </div>
-              <div class="space-y-1">
-                <div class="flex items-center justify-between font-label-md text-label-md">
-                  <span class="text-on-surface font-medium">Check 2: Involuntary Voice Stress &amp; Tremor</span>
-                  <span class="font-mono text-error font-bold" id="check2-label">95% Verified</span>
-                </div>
-                <div class="w-full h-2 rounded-full bg-surface-container-lowest overflow-hidden">
-                  <div class="h-full bg-error rounded-full transition-all duration-500" id="check2-bar" style="width: 95%"></div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Detected Transcript Box -->
-            <div class="bg-surface-container-lowest p-3.5 rounded-r-lg shadow-sm relative overflow-hidden">
-              <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary-container"></div>
-              <span class="font-mono text-label-sm text-on-surface-variant uppercase tracking-wider block mb-1">ACOUSTIC INTAKE DECODER</span>
-              <blockquote class="font-mono text-telemetry-data text-on-surface font-medium leading-relaxed" id="transcript-text">
-                "Kapadandi! Somebody please help me! Namburu bypass daggara..."
-              </blockquote>
-              <div class="mt-2.5 flex flex-wrap gap-2" id="transcript-tags">
-                <span class="bg-tertiary-container/30 text-tertiary text-label-sm px-2 py-0.5 rounded font-mono font-medium">High Panic Pitch</span>
-                <span class="bg-tertiary-container/30 text-tertiary text-label-sm px-2 py-0.5 rounded font-mono font-medium">Severe Vocal Tremor</span>
-                <span class="bg-surface-container-highest text-primary text-label-sm px-2 py-0.5 rounded font-mono font-medium">Struggle Acoustics</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- RIGHT COLUMN (Span 3 columns) — STEP 3 // 112 RESPONSE (WITH REAL LEAFLET GIS MAP) -->
-          <div class="lg:col-span-3 flex flex-col gap-space-md" id="step3-col">
-            <div class="flex items-center justify-between">
-              <div>
-                <span class="font-mono text-label-sm text-primary uppercase tracking-widest block font-semibold">STEP 3 // 112 RESPONSE</span>
-                <h2 class="font-headline-sm text-headline-sm text-on-surface mt-0.5">Location &amp; Dispatch</h2>
-              </div>
-              <span class="font-mono text-label-sm bg-secondary/15 text-secondary px-2 py-0.5 rounded font-semibold" id="gps-accuracy-pill">GPS ±10m</span>
-            </div>
-
-            <!-- REAL INTERACTIVE LEAFLET MAP BOX -->
-            <div class="h-52 bg-surface-container-lowest rounded-xl relative overflow-hidden border border-surface-container-highest shadow-inner">
-              <!-- Live Leaflet Container -->
-              <div id="real-cad-map" class="w-full h-full z-10"></div>
-
-              <!-- Map Layer & Live GPS Controls Overlay (Top-Right) -->
-              <div class="absolute top-2 right-2 z-[400] flex items-center gap-1 bg-surface-container-low/90 backdrop-blur px-1.5 py-1 rounded border border-surface-container-highest font-mono text-[10px]">
-                <button type="button" data-map-layer="dark" class="map-layer-btn px-1.5 py-0.5 rounded bg-primary-container text-on-primary-container font-semibold">Dark GIS</button>
-                <button type="button" data-map-layer="sat" class="map-layer-btn px-1.5 py-0.5 rounded text-on-surface-variant hover:text-on-surface">Satellite</button>
-                <button type="button" data-map-layer="street" class="map-layer-btn px-1.5 py-0.5 rounded text-on-surface-variant hover:text-on-surface">Street</button>
-                <button type="button" id="btn-locate-gps" title="Lock onto my real hardware GPS" class="px-1.5 py-0.5 rounded bg-secondary/20 text-secondary font-semibold hover:bg-secondary/30">My GPS</button>
-              </div>
-
-              <!-- Radar Lock Status Overlay (Bottom-Left) -->
-              <div class="absolute bottom-1.5 left-2 z-[400] bg-surface-container-high/90 backdrop-blur px-2 py-0.5 rounded font-mono text-[9px] text-on-surface flex items-center gap-1.5 border border-surface-container-highest">
-                <span class="w-1.5 h-1.5 rounded-full bg-error animate-ping"></span>
-                <span id="map-radar-caption">LIVE GIS LOCK: NH-16 NAMBURU SECTOR</span>
-              </div>
-            </div>
-
-            <!-- Key-Value Dispatch Details List -->
-            <div class="bg-surface-container rounded-xl p-3.5 space-y-2.5 font-label-md text-label-md shadow-sm">
-              <div class="flex items-center justify-between">
-                <span class="text-on-surface-variant">Street Location</span>
-                <span class="font-medium text-on-surface truncate text-right max-w-[175px]" id="dispatch-street">Namburu Highway Corridor, Guntur</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-on-surface-variant">GPS Coordinates</span>
-                <span class="font-mono text-on-surface" id="dispatch-coords">16.3462° N, 80.5249° E</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-on-surface-variant">Assigned Unit</span>
-                <span class="font-mono text-secondary font-semibold" id="dispatch-unit">PCR-GNT-14 (Police Patrol)</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-on-surface-variant">Estimated Arrival</span>
-                <span class="font-mono text-primary font-semibold" id="dispatch-eta">3 min 20 sec (En Route)</span>
-              </div>
-              <div class="flex items-center justify-between pt-1">
-                <span class="text-on-surface-variant">Siren Protocol</span>
-                <span class="bg-error-container/80 text-error font-mono text-label-sm px-2 py-0.5 rounded font-bold" id="dispatch-siren">ACTIVE SIRENS (FAST)</span>
-              </div>
-            </div>
-
-            <!-- Action Button Stack -->
-            <div class="flex flex-col gap-2">
-              <button class="w-full bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-label-md py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-sm" id="btn-voice-deterrent" type="button">
-                <svg class="w-4 h-4 text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
-                <span id="deterrent-btn-label">Play 112 Voice Deterrent Announcement</span>
-              </button>
-
-              <button class="w-full bg-primary-container hover:bg-primary-container/90 text-on-primary-container text-label-md py-2.5 px-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm" id="btn-open-gmaps" type="button">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                  <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-                </svg>
-                <span>Open Live Location in Google Maps</span>
-              </button>
-
-              <div class="grid grid-cols-2 gap-2 mt-0.5">
-                <button class="bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface text-label-md py-2 rounded-lg font-medium text-center transition-colors" id="btn-send-sms" type="button">
-                  Send 112 SMS
-                </button>
-                <button class="bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface text-label-md py-2 rounded-lg font-medium text-center transition-colors" id="btn-save-json" type="button">
-                  Save JSON Report
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- SECTION 2: BOTTOM SUMMARY ROW -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6 w-full" id="audit-trail-section">
-          <!-- LEFT CARD: REAL-TIME AUDIT TRAIL -->
-          <div class="bg-surface-container-low rounded-xl p-5 flex flex-col gap-space-sm shadow-sm">
-            <div>
-              <span class="font-mono text-label-sm text-primary uppercase tracking-widest block font-semibold">PUBLIC SAFETY LOGS</span>
-              <h3 class="font-headline-md text-headline-md text-on-surface mt-0.5">Real-Time Audit Trail</h3>
-              <p class="font-body-sm text-body-sm text-on-surface-variant">Autonomous triage decisions recorded for judicial review &amp; accountability</p>
-            </div>
-            <div class="overflow-x-auto mt-2">
-              <table class="w-full text-left font-telemetry-data text-telemetry-data border-collapse">
-                <thead>
-                  <tr class="bg-surface-container text-on-surface-variant font-mono text-label-sm">
-                    <th class="py-2 px-3 rounded-l">Time</th>
-                    <th class="py-2 px-3">Pitch / Tremor</th>
-                    <th class="py-2 px-3">Verdict</th>
-                    <th class="py-2 px-3 rounded-r">Siren Mode</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y-0" id="audit-table-body">
-                  <tr class="hover:bg-surface-container transition-colors">
-                    <td class="py-2.5 px-3 font-mono text-on-surface">13:24:58</td>
-                    <td class="py-2.5 px-3 font-mono text-on-surface">368.5 Hz / 4.85% Jitter</td>
-                    <td class="py-2.5 px-3">
-                      <span class="bg-error-container/60 text-error font-mono text-label-sm px-2 py-0.5 rounded font-semibold">EMERGENCY VERIFIED</span>
-                    </td>
-                    <td class="py-2.5 px-3 font-mono text-label-sm text-error font-semibold">ACTIVE SIREN (FAST)</td>
-                  </tr>
-                  <tr class="hover:bg-surface-container transition-colors">
-                    <td class="py-2.5 px-3 font-mono text-on-surface">13:18:12</td>
-                    <td class="py-2.5 px-3 font-mono text-on-surface">134.2 Hz / 0.58% Jitter</td>
-                    <td class="py-2.5 px-3">
-                      <span class="bg-secondary/15 text-secondary font-mono text-label-sm px-2 py-0.5 rounded font-semibold">PRANK FILTERED</span>
-                    </td>
-                    <td class="py-2.5 px-3 font-mono text-label-sm text-on-surface-variant">DISPATCH SUPPRESSED</td>
-                  </tr>
-                  <tr class="hover:bg-surface-container transition-colors">
-                    <td class="py-2.5 px-3 font-mono text-on-surface">13:02:40</td>
-                    <td class="py-2.5 px-3 font-mono text-on-surface">188.0 Hz / 3.42% Jitter</td>
-                    <td class="py-2.5 px-3">
-                      <span class="bg-surface-container-highest text-primary font-mono text-label-sm px-2 py-0.5 rounded font-semibold">SILENT SOS VERIFIED</span>
-                    </td>
-                    <td class="py-2.5 px-3 font-mono text-label-sm text-primary">SILENT APPROACH</td>
-                  </tr>
-                  <tr class="hover:bg-surface-container transition-colors">
-                    <td class="py-2.5 px-3 font-mono text-on-surface">12:47:19</td>
-                    <td class="py-2.5 px-3 font-mono text-on-surface">296.0 Hz / 3.45% Jitter</td>
-                    <td class="py-2.5 px-3">
-                      <span class="bg-tertiary-container/40 text-tertiary font-mono text-label-sm px-2 py-0.5 rounded font-semibold">AMBULANCE 108</span>
-                    </td>
-                    <td class="py-2.5 px-3 font-mono text-label-sm text-tertiary">TRAUMA AMBULANCE</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- RIGHT CARD: REAL-WORLD IMPACT -->
-          <div class="bg-surface-container-low rounded-xl p-5 flex flex-col gap-space-sm shadow-sm">
-            <div>
-              <span class="font-mono text-label-sm text-primary uppercase tracking-widest block font-semibold">BENCHMARK &amp; ACCURACY</span>
-              <h3 class="font-headline-md text-headline-md text-on-surface mt-0.5">Real-World Impact Comparison</h3>
-              <p class="font-body-sm text-body-sm text-on-surface-variant">Operational performance vs legacy emergency call handling systems</p>
-            </div>
-            <div class="overflow-x-auto mt-2">
-              <table class="w-full text-left font-body-sm text-body-sm border-collapse">
-                <thead>
-                  <tr class="bg-surface-container text-on-surface-variant font-mono text-label-sm">
-                    <th class="py-2 px-2.5 rounded-l">Feature / Metric</th>
-                    <th class="py-2 px-2 text-on-surface-variant">C-DAC 112</th>
-                    <th class="py-2 px-2 text-on-surface-variant">AP Shakti</th>
-                    <th class="py-2 px-2 text-on-surface-variant">TS T-Safe</th>
-                    <th class="py-2 px-2.5 rounded-r bg-primary-container/20 text-primary font-bold">DHVANI-CAD (Ours)</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y-0">
-                  <tr class="hover:bg-surface-container transition-colors">
-                    <td class="py-2.5 px-2.5 font-medium text-on-surface">Joke / Prank Filter</td>
-                    <td class="py-2.5 px-2 text-on-surface-variant text-[11px]">None (100% human load)</td>
-                    <td class="py-2.5 px-2 text-on-surface-variant text-[11px]">Manual review</td>
-                    <td class="py-2.5 px-2 text-on-surface-variant text-[11px]">Manual review</td>
-                    <td class="py-2.5 px-2.5 bg-primary-container/10 font-mono text-secondary font-semibold text-[11px]">Autonomous (99.2%)</td>
-                  </tr>
-                  <tr class="hover:bg-surface-container transition-colors">
-                    <td class="py-2.5 px-2.5 font-medium text-on-surface">Covert Whisper SOS</td>
-                    <td class="py-2.5 px-2 text-on-surface-variant text-[11px]">Failed (missed)</td>
-                    <td class="py-2.5 px-2 text-on-surface-variant text-[11px]">Button tap only</td>
-                    <td class="py-2.5 px-2 text-on-surface-variant text-[11px]">Tracking only</td>
-                    <td class="py-2.5 px-2.5 bg-primary-container/10 font-mono text-primary font-semibold text-[11px]">Sub-vocal tremor verified</td>
-                  </tr>
-                  <tr class="hover:bg-surface-container transition-colors">
-                    <td class="py-2.5 px-2.5 font-medium text-on-surface">Zero-Dial Voice Trigger</td>
-                    <td class="py-2.5 px-2 text-on-surface-variant text-[11px]">Not supported</td>
-                    <td class="py-2.5 px-2 text-on-surface-variant text-[11px]">Requires unlock</td>
-                    <td class="py-2.5 px-2 text-on-surface-variant text-[11px]">App open only</td>
-                    <td class="py-2.5 px-2.5 bg-primary-container/10 font-mono text-secondary font-semibold text-[11px]">Continuous guardian</td>
-                  </tr>
-                  <tr class="hover:bg-surface-container transition-colors">
-                    <td class="py-2.5 px-2.5 font-medium text-on-surface">Dispatch Response Time</td>
-                    <td class="py-2.5 px-2 text-on-surface-variant text-[11px]">7 to 12 mins</td>
-                    <td class="py-2.5 px-2 text-on-surface-variant text-[11px]">6 to 9 mins</td>
-                    <td class="py-2.5 px-2 text-on-surface-variant text-[11px]">5 to 8 mins</td>
-                    <td class="py-2.5 px-2.5 bg-primary-container/10 font-mono text-primary font-bold text-[11px]">&lt; 90s (Instant lock)</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
+  <main class="cad-grid" id="mainConsole" role="main">
+    <!-- LEFT PANEL: TELECOM NODES + CONTINUOUS ZERO-TOUCH GUARDIAN -->
+    <section class="cad-panel" aria-labelledby="multiplexerHeading">
+      <div class="panel-header">
+        <h2 class="panel-title" id="multiplexerHeading">01 // Field Nodes &amp; Live Intercept</h2>
+        <span class="panel-meta" id="engineModeReadout">CONTINUOUS VAD + DSP</span>
       </div>
-    </div>
+
+      <div class="channel-list" id="channelListContainer" role="list" aria-label="Active Field Streams"></div>
+
+      <div class="control-section" role="group" aria-label="Real-World Guardian and Calibration Presets">
+        <div class="panel-title">Zero-Touch Field Guardian (Phone / Mic)</div>
+        <button
+          type="button"
+          class="btn-tactical btn-live-mic"
+          id="toggleLiveMicBtn"
+          aria-pressed="false"
+        >
+          <span id="liveMicBtnLabel">[ARM ZERO-TOUCH CONTINUOUS GUARDIAN]</span>
+          <span>LIVE-VAD</span>
+        </button>
+
+        <div class="panel-title panel-title-spaced">Benchmark Calibration Vectors</div>
+        <button type="button" class="btn-tactical" data-preset="BENIGN_JOKE">
+          <span>TEST A: TELUGU/EN CASUAL JOKE</span>
+          <span>SUPPRESS</span>
+        </button>
+        <button type="button" class="btn-tactical" data-preset="ACTIVE_ASSAULT">
+          <span>TEST B: HIGH-DECIBEL ASSAULT SCREAM</span>
+          <span>ERSS-P1</span>
+        </button>
+        <button type="button" class="btn-tactical" data-preset="COVERT_HOSTAGE">
+          <span>TEST C: COVERT HOSTAGE WHISPER</span>
+          <span>SILENT-P1</span>
+        </button>
+        <button type="button" class="btn-tactical" data-preset="HIGHWAY_MVA">
+          <span>TEST D: NH-16 VEHICULAR IMPACT</span>
+          <span>108-MVA</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- CENTER PANEL: DSP OSCILLOSCOPE & DUAL-THRESHOLD FUSION -->
+    <section class="cad-panel" aria-labelledby="dspFusionHeading">
+      <div class="panel-header">
+        <h2 class="panel-title" id="dspFusionHeading">02 // Biometric Acoustic &amp; Semantic Fusion</h2>
+        <span class="panel-meta" id="inferenceLatencyReadout">LATENCY: 5 ms</span>
+      </div>
+
+      <div class="center-content">
+        <div class="scope-grid">
+          <div class="scope-box">
+            <div class="scope-label">
+              <span>TIME-DOMAIN WAVEFORM (48kHz PCM)</span>
+              <span id="scopeChannelTag">CH-06 // LIVE HARDWARE</span>
+            </div>
+            <canvas
+              id="timeDomainCanvas"
+              class="primary-canvas"
+              width="460"
+              height="110"
+              role="img"
+              aria-label="Time domain acoustic waveform oscilloscope"
+            ></canvas>
+          </div>
+
+          <div class="scope-box">
+            <div class="scope-label">
+              <span>FFT SPECTRAL DENSITY (75 Hz - 4000 Hz)</span>
+              <span id="f0PeakCursorLabel">F0 PEAK: 140.0 Hz</span>
+            </div>
+            <canvas
+              id="frequencyCanvas"
+              class="primary-canvas"
+              width="460"
+              height="110"
+              role="img"
+              aria-label="Fast Fourier Transform frequency spectrum"
+            ></canvas>
+          </div>
+        </div>
+
+        <div class="biometric-cards" role="region" aria-label="Real-Time Acoustic Biometrics">
+          <div class="bio-card">
+            <div class="bio-label">Fundamental Pitch (F0)</div>
+            <div class="bio-value" id="metricF0">140.0 Hz</div>
+            <div class="bio-norm">NOMINAL: 85 - 220 Hz</div>
+          </div>
+          <div class="bio-card">
+            <div class="bio-label">Glottal Jitter (Tremor)</div>
+            <div class="bio-value" id="metricJitter">0.55 %</div>
+            <div class="bio-norm">CLINICAL NORM: &lt; 1.04%</div>
+          </div>
+          <div class="bio-card">
+            <div class="bio-label">Acoustic Intensity</div>
+            <div class="bio-value" id="metricSpl">60.2 dB</div>
+            <div class="bio-norm">WHISPER GATE: &lt; 48 dB</div>
+          </div>
+          <div class="bio-card">
+            <div class="bio-label">Zero-Crossing Rate</div>
+            <div class="bio-value" id="metricZcr">0.068</div>
+            <div class="bio-norm">FRICATIVE / IMPACT IDX</div>
+          </div>
+        </div>
+
+        <div class="gate-container" role="region" aria-label="Dual-Threshold Decision Gate">
+          <div class="panel-title">
+            Dual-Threshold Gate: Alert Requires [Lexical Threat + Involuntary Vocal Tremor]
+          </div>
+
+          <div class="meter-row">
+            <div class="meter-header">
+              <span id="gateALabel">GATE A // BILINGUAL LEXICAL THREAT INDEX (TE-IN / EN-IN)</span>
+              <strong id="keywordScoreVal" class="mono-num">0%</strong>
+            </div>
+            <div
+              class="meter-track"
+              id="keywordProgressTrack"
+              role="progressbar"
+              aria-labelledby="gateALabel"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <div class="meter-fill" id="keywordMeterFill"></div>
+            </div>
+          </div>
+
+          <div class="meter-row">
+            <div class="meter-header">
+              <span id="gateBLabel">GATE B // BIOMETRIC VOCAL STRESS &amp; GLOTTAL JITTER INDEX</span>
+              <strong id="vocalStressScoreVal" class="mono-num">12%</strong>
+            </div>
+            <div
+              class="meter-track"
+              id="vocalStressProgressTrack"
+              role="progressbar"
+              aria-labelledby="gateBLabel"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="12"
+            >
+              <div class="meter-fill" id="vocalStressMeterFill"></div>
+            </div>
+          </div>
+
+          <div class="meter-row">
+            <div class="meter-header">
+              <span id="gateCompositeLabel">COMPOSITE DHVANI TRIAGE PROBABILITY (DISPATCH THRESHOLD: 78%)</span>
+              <strong id="compositeScoreVal" class="mono-num">8%</strong>
+            </div>
+            <div
+              class="meter-track"
+              id="compositeProgressTrack"
+              role="progressbar"
+              aria-labelledby="gateCompositeLabel"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="8"
+            >
+              <div class="meter-fill" id="compositeMeterFill"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="forensic-box" role="region" aria-label="Forensic Transcript and Acoustic Markers">
+          <div class="scope-label">
+            <span>LIVE STREAM TRANSCRIPT &amp; PARALINGUISTIC AUDIT</span>
+            <span id="detectedLangBadge">LANG: STANDBY</span>
+          </div>
+          <div class="transcript-readout" id="transcriptReadout" aria-live="polite">
+            [ARM ZERO-TOUCH GUARDIAN TO STREAM REAL MICROPHONE + GPS TELEMETRY ACROSS DEVICES]
+          </div>
+          <div class="marker-tags" id="markerTagsContainer" aria-label="Detected Paralinguistic Tags"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT PANEL: LIVE HARDWARE GPS & REAL DISPATCH LINKS -->
+    <aside class="cad-panel" aria-labelledby="triangulationHeading">
+      <div class="panel-header">
+        <h2 class="panel-title" id="triangulationHeading">03 // Live Hardware GPS &amp; Dispatch</h2>
+        <span class="panel-meta" id="gpsAccuracyMeta">GPS ACC: +/- 12m</span>
+      </div>
+
+      <div class="gis-container">
+        <svg
+          class="radar-svg"
+          viewBox="0 0 340 210"
+          role="img"
+          aria-label="Live Geodetic Triangulation Vector Map for Guntur Namburu Sector"
+        >
+          <defs>
+            <pattern id="cadGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+              <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#111c2d" stroke-width="1" />
+            </pattern>
+          </defs>
+          <rect width="340" height="210" fill="url(#cadGrid)" />
+          <path d="M 20 185 Q 160 110 315 25" fill="none" stroke="#1e293b" stroke-width="3" />
+          <text x="235" y="38" fill="#475569" font-family="JetBrains Mono" font-size="8">NH-16 CORRIDOR</text>
+
+          <circle cx="95" cy="145" r="52" fill="none" stroke="#1e293b" stroke-dasharray="3 3" />
+          <circle cx="235" cy="135" r="58" fill="none" stroke="#1e293b" stroke-dasharray="3 3" />
+          <circle cx="175" cy="52" r="54" fill="none" stroke="#1e293b" stroke-dasharray="3 3" />
+
+          <rect x="91" y="141" width="8" height="8" fill="#38bdf8" />
+          <text x="65" y="162" fill="#94a3b8" font-family="JetBrains Mono" font-size="8">GNT-NMB-04B</text>
+
+          <rect x="231" y="131" width="8" height="8" fill="#38bdf8" />
+          <text x="205" y="152" fill="#94a3b8" font-family="JetBrains Mono" font-size="8">GNT-BRO-02A</text>
+
+          <rect x="171" y="48" width="8" height="8" fill="#38bdf8" />
+          <text x="145" y="42" fill="#94a3b8" font-family="JetBrains Mono" font-size="8">MGL-AIIMS-03D</text>
+
+          <g id="targetLockGroup" opacity="0.35">
+            <line x1="95" y1="145" x2="168" y2="114" stroke="#ef4444" stroke-width="1" />
+            <line x1="235" y1="135" x2="168" y2="114" stroke="#ef4444" stroke-width="1" />
+            <line x1="175" y1="52" x2="168" y2="114" stroke="#ef4444" stroke-width="1" />
+            <circle cx="168" cy="114" r="10" fill="none" stroke="#ef4444" stroke-width="1.5" />
+            <circle cx="168" cy="114" r="3" fill="#ef4444" />
+          </g>
+        </svg>
+
+        <div
+          class="dispatch-ticket"
+          id="dispatchTicketCard"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          <div class="status-banner" id="incidentCodeBanner">ERSS_NOMINAL_STANDBY</div>
+
+          <div class="dispatch-kv">
+            <span>STREET ADDRESS</span>
+            <span id="ticketCellId" class="address-value">Namburu Sector</span>
+          </div>
+          <div class="dispatch-kv">
+            <span>HARDWARE GPS FIX</span>
+            <span id="ticketCoords">16.34620 N, 80.52490 E</span>
+          </div>
+          <div class="dispatch-kv">
+            <span>ASSIGNED UNIT</span>
+            <span id="ticketUnit">NONE // PASSIVE SCAN</span>
+          </div>
+          <div class="dispatch-kv">
+            <span>SIREN / PA POLICY</span>
+            <span id="ticketSirenPolicy">STANDBY</span>
+          </div>
+          <div class="dispatch-kv">
+            <span>INFERENCE SOURCE</span>
+            <span id="ticketEngineSource">LOCAL_DSP_ENGINE</span>
+          </div>
+
+          <p class="cad-subtitle" id="ticketTacticalBrief">
+            Cross-device SSE relay online. Speak into armed field phone to stream live distress telemetry.
+          </p>
+
+          <div class="action-links-grid">
+            <a
+              id="liveGoogleMapsLink"
+              href="https://www.google.com/maps?q=16.3462,80.5249"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn-tactical btn-link-centered"
+            >
+              <span>[OPEN GOOGLE MAPS]</span>
+            </a>
+            <a
+              id="liveSms112Link"
+              href="sms:112"
+              class="btn-tactical btn-link-danger"
+            >
+              <span>[DISPATCH 112 SMS]</span>
+            </a>
+          </div>
+
+          <button type="button" class="btn-tactical" id="exportAuditJsonBtn">
+            <span>[EXPORT ERSS-112 INCIDENT PACKET JSON]</span>
+            <span>JSON</span>
+          </button>
+        </div>
+      </div>
+    </aside>
   </main>
 
-  <footer class="w-full bg-surface-container-low border-t border-surface-container-high py-space-md">
-    <div class="max-w-[1440px] mx-auto px-margin flex flex-col md:flex-row items-center justify-between gap-space-sm font-label-sm text-label-sm text-on-surface-variant">
-      <div class="flex items-center gap-space-sm font-mono">
-        <span>ANDHRA PRADESH POLICE INTEGRATED COMMAND CONTROL</span>
-        <span class="text-surface-container-highest">//</span>
-        <span>CORRIDOR 112 OPERATIONAL NODE</span>
+  <div class="modal-backdrop" id="apiKeyModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+    <div class="modal-card">
+      <div class="panel-header">
+        <h2 class="panel-title" id="modalTitle">Configure Google AI Studio (Gemini 2.5 Flash) Key</h2>
       </div>
-      <div class="font-mono text-on-surface-variant/80">
-        AUTOMATED ACOUSTIC TRIAGE &amp; PRIORITY DISPATCH PROTOCOL • RESTRICTED ACCESS
+      <p class="cad-subtitle">
+        Stored exclusively in browser <code>sessionStorage</code>. Optional: local autocorrelation DSP + live SpeechRecognition work out-of-the-box without a key.
+      </p>
+      <label for="geminiApiKeyInput" class="bio-label">GEMINI API KEY</label>
+      <input
+        type="password"
+        id="geminiApiKeyInput"
+        class="input-field"
+        placeholder="AIzaSy..."
+        autocomplete="off"
+      />
+      <div class="modal-actions">
+        <button type="button" class="btn-tactical" id="closeApiKeyModalBtn">CANCEL</button>
+        <button type="button" class="btn-tactical btn-live-mic" id="saveApiKeyBtn">SAVE SESSION KEY</button>
       </div>
     </div>
-  </footer>
+  </div>
 
-  <!-- COMPLETE REAL-WORLD MAP, DSP & SCENARIO ENGINE -->
-  <script>
-    (function () {
-      // 1. SCENARIO DATA DEFINITIONS
-      const SCENARIOS = {
-        prank: {
-          key: "prank",
-          title: "FALSE ALARM BLOCKED — CASUAL CONVERSATION",
-          scoreText: "14% Threat Score",
-          desc: "Danger keywords ('kapadandra / help') detected, but vocal cords show calm stability (0.62% Jitter, 132.4 Hz). Dispatch suppressed.",
-          bannerBg: "bg-secondary/15",
-          dotColor: "bg-secondary",
-          textColor: "text-secondary",
-          pitch: "132.4 Hz",
-          pitchSub: "Normal: 85–220 Hz (Calm)",
-          jitter: "0.62 %",
-          jitterSub: "Calm: < 1.20% (Stable)",
-          db: "64.8 dB",
-          dbSub: "Normal Conversational Volume",
-          check1: 86,
-          check2: 12,
-          lang: "Bilingual TE + EN",
-          transcript: '"Rey mama kapadandra, ee exam nannu champesthundi, help me bro!"',
-          tags: ["Calm Vocal Cords", "Laughter Harmonics", "Prank Suppressed"],
-          unit: "NONE (Standby)",
-          eta: "Not Dispatched (Filtered)",
-          sirenText: "SUPPRESSED (NO ALERT)",
-          sirenClass: "bg-secondary/20 text-secondary",
-          auditVerdict: "PRANK FILTERED",
-          auditBadgeClass: "bg-secondary/15 text-secondary",
-          callerLat: 16.3458,
-          callerLng: 80.5284,
-          patrolLat: 16.3520,
-          patrolLng: 80.5350,
-          locationLabel: "VVITU Campus Road, Namburu",
-          toneFreq: 132,
-          toneJitter: 0.5,
-          wavePrimary: "M0,40 Q30,34 60,40 T120,40 T180,40 T240,40 T300,40 T360,40 T420,40 T480,40"
-        },
-        distress: {
-          key: "distress",
-          title: "EMERGENCY VERIFIED — PRIORITY 1 DISPATCH",
-          scoreText: "96% Threat Score",
-          desc: "Distress words ('Kapadandi / Help') matched with severe vocal cord tremor (4.85% Jitter) and elevated pitch (368.5 Hz).",
-          bannerBg: "bg-error-container/40",
-          dotColor: "bg-error",
-          textColor: "text-error",
-          pitch: "368.5 Hz",
-          pitchSub: "Normal: 85–220 Hz (+68%)",
-          jitter: "4.85 %",
-          jitterSub: "Calm: < 1.20% (Severe Panic)",
-          db: "94.2 dB",
-          dbSub: "Whisper: < 48 dB (Scream)",
-          check1: 92,
-          check2: 95,
-          lang: "Telugu + English",
-          transcript: '"Kapadandi! Somebody please help me! Namburu bypass daggara..."',
-          tags: ["High Panic Pitch", "Severe Vocal Tremor", "Struggle Acoustics"],
-          unit: "PCR-GNT-14 (Police Patrol)",
-          eta: "3 min 20 sec (En Route)",
-          sirenText: "ACTIVE SIRENS (FAST)",
-          sirenClass: "bg-error-container/80 text-error",
-          auditVerdict: "EMERGENCY VERIFIED",
-          auditBadgeClass: "bg-error-container/60 text-error",
-          callerLat: 16.3462,
-          callerLng: 80.5249,
-          patrolLat: 16.3395,
-          patrolLng: 80.5165,
-          locationLabel: "Namburu Highway Corridor, Guntur",
-          toneFreq: 368,
-          toneJitter: 18,
-          wavePrimary: "M0,40 Q15,38 30,40 T60,39 T90,42 T110,40 Q125,18 135,62 T150,12 T165,68 T180,8 T195,72 T210,14 T225,66 T240,22 T255,58 T270,30 T285,50 T300,38 Q320,10 335,70 T350,15 T365,64 T380,24 T395,54 T410,38 T430,41 T455,39 T480,40"
-        },
-        whisper: {
-          key: "whisper",
-          title: "COVERT WHISPER VERIFIED — SILENT POLICE APPROACH",
-          scoreText: "91% Threat Score",
-          desc: "Low-decibel whisper (38.5 dB) with involuntary vocal tremor (3.92% Jitter). Police notified to approach with sirens OFF.",
-          bannerBg: "bg-primary-container/30",
-          dotColor: "bg-primary",
-          textColor: "text-primary",
-          pitch: "214.0 Hz",
-          pitchSub: "Unvoiced Fricative Whisper",
-          jitter: "3.92 %",
-          jitterSub: "High Micro-Tremor (Hiding)",
-          db: "38.5 dB",
-          dbSub: "Covert Whisper (< 48 dB Gate)",
-          check1: 88,
-          check2: 91,
-          lang: "English (Covert)",
-          transcript: '"(Whispering) Please help... someone broke into the house... hiding in bedroom, do not make noise."',
-          tags: ["Covert Whisper (<48dB)", "High Vocal Tremor", "Sirens Strictly OFF"],
-          unit: "PCR-GNT-08 (Stealth Unit)",
-          eta: "2 min 45 sec (Silent Approach)",
-          sirenText: "COVERT // NO SIRENS",
-          sirenClass: "bg-primary-container/50 text-primary",
-          auditVerdict: "SILENT SOS VERIFIED",
-          auditBadgeClass: "bg-surface-container-highest text-primary",
-          callerLat: 16.3067,
-          callerLng: 80.4365,
-          patrolLat: 16.3125,
-          patrolLng: 80.4420,
-          locationLabel: "Brodipet Sector 4, Guntur",
-          toneFreq: 214,
-          toneJitter: 12,
-          wavePrimary: "M0,40 Q10,35 20,45 T40,36 T60,44 T80,35 T100,45 T120,34 T140,46 T160,35 T180,45 T200,36 T220,44 T240,35 T260,45 T280,36 T300,44 T320,35 T340,45 T360,37 T380,43 T400,36 T420,44 T440,38 T480,40"
-        },
-        crash: {
-          key: "crash",
-          title: "HIGHWAY CRASH DETECTED — 108 TRAUMA AMBULANCE",
-          scoreText: "94% Threat Score",
-          desc: "High-energy vehicular impact, glass shatter transient (3.8 kHz), and non-verbal pain acoustics verified on NH-16.",
-          bannerBg: "bg-tertiary-container/40",
-          dotColor: "bg-tertiary",
-          textColor: "text-tertiary",
-          pitch: "296.0 Hz",
-          pitchSub: "Non-Verbal Pain Groan",
-          jitter: "3.45 %",
-          jitterSub: "Trauma Stress Verified",
-          db: "98.6 dB",
-          dbSub: "Impact + Tire Skid Impulse",
-          check1: 76,
-          check2: 94,
-          lang: "Acoustic Impact + Voice",
-          transcript: '"[Tire Skid + Glass Shatter] Ugh... accident near Kaza toll plaza... bleeding..."',
-          tags: ["Metallic Impact Impulse", "Glass Shatter 3.8kHz", "108 ALS Trauma Dispatch"],
-          unit: "108-AMB-NMB-02 + PCR-14",
-          eta: "4 min 10 sec (Green Corridor)",
-          sirenText: "108 TRAUMA SIRENS",
-          sirenClass: "bg-tertiary-container/70 text-tertiary",
-          auditVerdict: "AMBULANCE 108",
-          auditBadgeClass: "bg-tertiary-container/40 text-tertiary",
-          callerLat: 16.3820,
-          callerLng: 80.5390,
-          patrolLat: 16.3650,
-          patrolLng: 80.5310,
-          locationLabel: "NH-16 Kaza Toll Corridor, Guntur",
-          toneFreq: 296,
-          toneJitter: 15,
-          wavePrimary: "M0,40 L40,40 L55,5 L70,75 L85,8 L100,72 L115,15 L130,65 L150,28 L175,55 L200,32 L230,48 L260,18 L280,66 L310,25 L340,52 L380,36 L420,42 L480,40"
-        }
-      };
-
-      let activeScenario = SCENARIOS.distress;
-      let patrolAnimTimer = null;
-
-      // 2. INITIALIZE REAL INTERACTIVE LEAFLET GIS MAP
-      const map = L.map("real-cad-map", {
-        center: [16.3462, 80.5249],
-        zoom: 14,
-        zoomControl: false
-      });
-
-      L.control.zoom({ position: "bottomright" }).addTo(map);
-
-      const tileLayers = {
-        dark: L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-          attribution: "&copy; OSM &amp; CARTO",
-          maxZoom: 19
-        }),
-        sat: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-          attribution: "&copy; Esri World Imagery",
-          maxZoom: 19
-        }),
-        street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "&copy; OpenStreetMap",
-          maxZoom: 19
-        })
-      };
-
-      let currentLayer = tileLayers.dark.addTo(map);
-
-      // Cell Towers (Namburu & Guntur)
-      const towerIcon = L.divIcon({
-        className: "",
-        html: '<div class="cad-marker-tower"></div>',
-        iconSize: [12, 12],
-        iconAnchor: [6, 6]
-      });
-
-      const namburuTowerCoords = [16.3495, 80.5210];
-      const gunturTowerCoords = [16.3380, 80.5335];
-
-      L.marker(namburuTowerCoords, { icon: towerIcon })
-        .addTo(map)
-        .bindPopup("<strong>CELL NODE: GNT-NMB-04B</strong><br/>Namburu Transceiver (LAC 4102)");
-      L.circle(namburuTowerCoords, {
-        radius: 650,
-        color: "#b4c5ff",
-        weight: 1,
-        fillColor: "#2563eb",
-        fillOpacity: 0.06,
-        dashArray: "4 4"
-      }).addTo(map);
-
-      L.marker(gunturTowerCoords, { icon: towerIcon })
-        .addTo(map)
-        .bindPopup("<strong>CELL NODE: GNT-HWY-02A</strong><br/>NH-16 Corridor Node (LAC 4102)");
-      L.circle(gunturTowerCoords, {
-        radius: 650,
-        color: "#b4c5ff",
-        weight: 1,
-        fillColor: "#2563eb",
-        fillOpacity: 0.06,
-        dashArray: "4 4"
-      }).addTo(map);
-
-      // Caller SOS Marker & Patrol Unit Marker
-      const callerIcon = L.divIcon({
-        className: "",
-        html: '<div class="cad-marker-caller"><div class="ring"></div><div class="core"></div></div>',
-        iconSize: [18, 18],
-        iconAnchor: [9, 9]
-      });
-
-      const patrolIcon = L.divIcon({
-        className: "",
-        html: '<div class="cad-marker-patrol"></div>',
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
-      });
-
-      const callerMarker = L.marker([16.3462, 80.5249], { icon: callerIcon }).addTo(map);
-      const patrolMarker = L.marker([16.3395, 80.5165], { icon: patrolIcon }).addTo(map);
-
-      // Triangulation & Route Polylines
-      const triLine1 = L.polyline([namburuTowerCoords, [16.3462, 80.5249]], {
-        color: "#ffb3ad",
-        weight: 1.3,
-        dashArray: "3 4",
-        opacity: 0.75
-      }).addTo(map);
-
-      const triLine2 = L.polyline([gunturTowerCoords, [16.3462, 80.5249]], {
-        color: "#ffb3ad",
-        weight: 1.3,
-        dashArray: "3 4",
-        opacity: 0.75
-      }).addTo(map);
-
-      const patrolRouteLine = L.polyline([[16.3395, 80.5165], [16.3462, 80.5249]], {
-        color: "#4edea3",
-        weight: 2.5,
-        dashArray: "5 5"
-      }).addTo(map);
-
-      function updateMapForScenario(sc) {
-        const callerPos = [sc.callerLat, sc.callerLng];
-        const patrolStart = [sc.patrolLat, sc.patrolLng];
-
-        callerMarker.setLatLng(callerPos);
-        callerMarker
-          .bindPopup(
-            `<strong>${sc.auditVerdict}</strong><br/>${sc.locationLabel}<br/><span style="color:#ffb3ad;">Pitch: ${sc.pitch} | Jitter: ${sc.jitter}</span>`
-          )
-          .openPopup();
-
-        patrolMarker.setLatLng(patrolStart);
-        patrolMarker.bindPopup(`<strong>${sc.unit}</strong><br/>Status: ${sc.eta}`);
-
-        triLine1.setLatLngs([namburuTowerCoords, callerPos]);
-        triLine2.setLatLngs([gunturTowerCoords, callerPos]);
-        patrolRouteLine.setLatLngs([patrolStart, callerPos]);
-
-        map.flyTo(callerPos, 14, { duration: 0.9 });
-
-        if (patrolAnimTimer) clearInterval(patrolAnimTimer);
-        if (sc.key !== "prank") {
-          let step = 0;
-          const totalSteps = 60;
-          patrolAnimTimer = setInterval(() => {
-            step = (step + 1) % totalSteps;
-            const ratio = step / totalSteps;
-            const lat = patrolStart[0] + (callerPos[0] - patrolStart[0]) * ratio;
-            const lng = patrolStart[1] + (callerPos[1] - patrolStart[1]) * ratio;
-            patrolMarker.setLatLng([lat, lng]);
-            patrolRouteLine.setLatLngs([[lat, lng], callerPos]);
-          }, 250);
-        }
-      }
-
-      updateMapForScenario(activeScenario);
-
-      // Map Layer Switcher Buttons
-      document.querySelectorAll(".map-layer-btn").forEach((btn) => {
-        btn.addEventListener("click", function () {
-          const layerKey = this.getAttribute("data-map-layer");
-          if (tileLayers[layerKey]) {
-            map.removeLayer(currentLayer);
-            currentLayer = tileLayers[layerKey].addTo(map);
-          }
-          document.querySelectorAll(".map-layer-btn").forEach((b) => {
-            b.className = "map-layer-btn px-1.5 py-0.5 rounded text-on-surface-variant hover:text-on-surface";
-          });
-          this.className = "map-layer-btn px-1.5 py-0.5 rounded bg-primary-container text-on-primary-container font-semibold";
-        });
-      });
-
-      // Live Hardware GPS Lock Button
-      document.getElementById("btn-locate-gps").addEventListener("click", function () {
-        if (!navigator.geolocation) return;
-        this.textContent = "Locating...";
-        navigator.geolocation.getCurrentPosition(
-          async (pos) => {
-            const lat = Number(pos.coords.latitude.toFixed(4));
-            const lng = Number(pos.coords.longitude.toFixed(4));
-            const acc = Math.round(pos.coords.accuracy || 10);
-
-            document.getElementById("btn-locate-gps").textContent = "GPS Locked";
-            document.getElementById("gps-accuracy-pill").textContent = `GPS ±${acc}m`;
-            document.getElementById("dispatch-coords").textContent = `${lat}° N, ${lng}° E`;
-            document.getElementById("header-gps-coords").textContent = `${lat}° N, ${lng}° E`;
-
-            activeScenario.callerLat = lat;
-            activeScenario.callerLng = lng;
-            activeScenario.patrolLat = lat - 0.0055;
-            activeScenario.patrolLng = lng - 0.0065;
-
-            try {
-              const res = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`
-              );
-              const data = await res.json();
-              if (data && data.display_name) {
-                const shortAddr = data.display_name.split(",").slice(0, 3).join(", ");
-                activeScenario.locationLabel = shortAddr;
-                document.getElementById("dispatch-street").textContent = shortAddr;
-                document.getElementById("map-radar-caption").textContent = `LIVE GPS: ${shortAddr.toUpperCase()}`;
-              }
-            } catch (_) {}
-
-            updateMapForScenario(activeScenario);
-          },
-          () => {
-            document.getElementById("btn-locate-gps").textContent = "My GPS";
-          },
-          { enableHighAccuracy: true, timeout: 8000 }
-        );
-      });
-
-      // 3. SCENARIO SELECTION & UI UPDATER
-      function applyScenarioToUI(sc) {
-        activeScenario = sc;
-
-        document.getElementById("verdict-title").textContent = sc.title;
-        document.getElementById("verdict-score").textContent = sc.scoreText;
-        document.getElementById("verdict-desc").textContent = sc.desc;
-
-        const banner = document.getElementById("verdict-banner");
-        banner.className = `${sc.bannerBg} rounded-xl p-space-md flex flex-col gap-1.5 shadow-sm transition-colors duration-300`;
-
-        document.getElementById("metric-pitch").textContent = sc.pitch;
-        document.getElementById("metric-pitch-sub").textContent = sc.pitchSub;
-        document.getElementById("metric-jitter").textContent = sc.jitter;
-        document.getElementById("metric-jitter-sub").textContent = sc.jitterSub;
-        document.getElementById("metric-db").textContent = sc.db;
-        document.getElementById("metric-db-sub").textContent = sc.dbSub;
-
-        document.getElementById("check1-label").textContent = `${sc.check1}% Confidence`;
-        document.getElementById("check1-bar").style.width = `${sc.check1}%`;
-        document.getElementById("check2-label").textContent = `${sc.check2}% Verified`;
-        document.getElementById("check2-bar").style.width = `${sc.check2}%`;
-
-        document.getElementById("lang-detected-pill").textContent = sc.lang;
-        document.getElementById("transcript-text").textContent = sc.transcript;
-
-        const tagsContainer = document.getElementById("transcript-tags");
-        tagsContainer.innerHTML = sc.tags
-          .map(
-            (t) =>
-              `<span class="bg-surface-container-highest text-primary text-label-sm px-2 py-0.5 rounded font-mono font-medium">${t}</span>`
-          )
-          .join("");
-
-        document.getElementById("wave-path-primary").setAttribute("d", sc.wavePrimary);
-
-        document.getElementById("dispatch-street").textContent = sc.locationLabel;
-        document.getElementById("dispatch-coords").textContent =
-          `${sc.callerLat.toFixed(4)}° N, ${sc.callerLng.toFixed(4)}° E`;
-        document.getElementById("dispatch-unit").textContent = sc.unit;
-        document.getElementById("dispatch-eta").textContent = sc.eta;
-
-        const sirenEl = document.getElementById("dispatch-siren");
-        sirenEl.textContent = sc.sirenText;
-        sirenEl.className = `${sc.sirenClass} font-mono text-label-sm px-2 py-0.5 rounded font-bold`;
-
-        updateMapForScenario(sc);
-        prependAuditLogRow(sc);
-      }
-
-      function prependAuditLogRow(sc) {
-        const tbody = document.getElementById("audit-table-body");
-        const nowStr = new Date().toLocaleTimeString("en-IN", {
-          timeZone: "Asia/Kolkata",
-          hour12: false
-        });
-        const tr = document.createElement("tr");
-        tr.className = "hover:bg-surface-container transition-colors";
-        tr.innerHTML = `
-          <td class="py-2.5 px-3 font-mono text-on-surface">${nowStr}</td>
-          <td class="py-2.5 px-3 font-mono text-on-surface">${sc.pitch} / ${sc.jitter} Jitter</td>
-          <td class="py-2.5 px-3">
-            <span class="${sc.auditBadgeClass} font-mono text-label-sm px-2 py-0.5 rounded font-semibold">${sc.auditVerdict}</span>
-          </td>
-          <td class="py-2.5 px-3 font-mono text-label-sm text-on-surface-variant font-semibold">${sc.sirenText}</td>
-        `;
-        tbody.insertBefore(tr, tbody.firstChild);
-        while (tbody.children.length > 5) {
-          tbody.removeChild(tbody.lastChild);
-        }
-      }
-
-      const scenarioCards = document.querySelectorAll(".scenario-card");
-      scenarioCards.forEach((card) => {
-        card.addEventListener("click", function () {
-          scenarioCards.forEach((c) => {
-            c.classList.remove("bg-surface-container-high");
-            c.classList.add("bg-surface-container");
-            const bar = c.querySelector(".scenario-bar");
-            if (bar) bar.classList.add("hidden");
-          });
-          this.classList.remove("bg-surface-container");
-          this.classList.add("bg-surface-container-high");
-          const activeBar = this.querySelector(".scenario-bar");
-          if (activeBar) activeBar.classList.remove("hidden");
-
-          const key = this.getAttribute("data-scenario");
-          if (SCENARIOS[key]) {
-            applyScenarioToUI(SCENARIOS[key]);
-          }
-        });
-      });
-
-      // 4. REAL WEB AUDIO API MICROPHONE GUARDIAN & SIGNAL TONE SYNTHESIZER
-      const micBtn = document.getElementById("btn-live-mic");
-      let isListening = false;
-      let audioCtx = null;
-      let micStream = null;
-      let micAnimId = null;
-
-      micBtn.addEventListener("click", async function () {
-        if (isListening) {
-          stopLiveMic();
-          return;
-        }
-        try {
-          micStream = await navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: false, noiseSuppression: false }
-          });
-          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-          audioCtx = new AudioContextClass();
-          const source = audioCtx.createMediaStreamSource(micStream);
-          const analyser = audioCtx.createAnalyser();
-          analyser.fftSize = 1024;
-          source.connect(analyser);
-          const buf = new Float32Array(analyser.fftSize);
-
-          isListening = true;
-          micBtn.classList.remove("bg-secondary-container");
-          micBtn.classList.add("bg-error-container", "text-on-error-container");
-          micBtn.innerHTML = `
-            <span class="w-2 h-2 rounded-full bg-error animate-ping"></span>
-            <span>Acoustic Guardian Active (Speak Now...)</span>
-          `;
-
-          function sampleMic() {
-            if (!isListening) return;
-            analyser.getFloatTimeDomainData(buf);
-            let sum = 0;
-            let crossings = 0;
-            for (let i = 0; i < buf.length; i++) {
-              sum += buf[i] * buf[i];
-              if (i > 0 && ((buf[i] >= 0 && buf[i - 1] < 0) || (buf[i] < 0 && buf[i - 1] >= 0))) {
-                crossings++;
-              }
-            }
-            const rms = Math.sqrt(sum / buf.length);
-            const db = Math.min(108, Math.max(32, Math.round(100 + 20 * Math.log10(Math.max(rms, 1e-5)))));
-            const estHz = Math.min(440, Math.max(95, Math.round((crossings * audioCtx.sampleRate) / (2 * buf.length))));
-            const estJitter = Number(Math.min(6.2, Math.max(0.45, (rms * 14).toFixed(2))));
-
-            if (db > 45) {
-              document.getElementById("metric-pitch").textContent = `${estHz}.0 Hz`;
-              document.getElementById("metric-jitter").textContent = `${estJitter.toFixed(2)} %`;
-              document.getElementById("metric-db").textContent = `${db}.0 dB`;
-            }
-
-            let dPath = "M0,40 ";
-            const step = Math.floor(buf.length / 48);
-            for (let x = 0; x <= 48; x++) {
-              const sample = buf[Math.min(buf.length - 1, x * step)] || 0;
-              const y = Math.max(5, Math.min(75, Math.round(40 + sample * 140)));
-              dPath += `L${x * 10},${y} `;
-            }
-            document.getElementById("wave-path-primary").setAttribute("d", dPath);
-            micAnimId = requestAnimationFrame(sampleMic);
-          }
-          sampleMic();
-        } catch (_) {
-          alert("Microphone permission is required for live hardware voice analysis.");
-        }
-      });
-
-      function stopLiveMic() {
-        isListening = false;
-        if (micAnimId) cancelAnimationFrame(micAnimId);
-        if (micStream) micStream.getTracks().forEach((t) => t.stop());
-        if (audioCtx && audioCtx.state !== "closed") audioCtx.close();
-        micBtn.classList.remove("bg-error-container", "text-on-error-container");
-        micBtn.classList.add("bg-secondary-container");
-        micBtn.innerHTML = `
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-          <span>Start Live Microphone</span>
-        `;
-      }
-
-      // 5. HEAR SIGNAL TONE SYNTHESIZER
-      document.getElementById("btn-hear-tone").addEventListener("click", function () {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        const ctx = new AudioContextClass();
-        const osc = ctx.createOscillator();
-        const lfo = ctx.createOscillator();
-        const lfoGain = ctx.createGain();
-        const mainGain = ctx.createGain();
-
-        osc.type = "sawtooth";
-        osc.frequency.value = activeScenario.toneFreq || 368;
-        lfo.frequency.value = 14;
-        lfoGain.gain.value = activeScenario.toneJitter || 15;
-
-        lfo.connect(lfoGain);
-        lfoGain.connect(osc.frequency);
-        osc.connect(mainGain);
-        mainGain.connect(ctx.destination);
-
-        mainGain.gain.setValueAtTime(0.12, ctx.currentTime);
-        mainGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
-
-        osc.start();
-        lfo.start();
-        osc.stop(ctx.currentTime + 1.2);
-        lfo.stop(ctx.currentTime + 1.2);
-      });
-
-      // 6. ACTION BUTTONS (VOICE DETERRENT, GOOGLE MAPS, 112 SMS, JSON REPORT)
-      document.getElementById("btn-voice-deterrent").addEventListener("click", function () {
-        if (!("speechSynthesis" in window)) return;
-        window.speechSynthesis.cancel();
-        if (activeScenario.key === "whisper") {
-          alert("SILENT PROTOCOL ACTIVE: Speaker deterrent is muted during Covert Whisper SOS so the intruder is not alerted.");
-          return;
-        }
-        const msg = new SpeechSynthesisUtterance(
-          `Emergency alert verified by DHVANI 112. Police unit ${activeScenario.unit} dispatched to ${activeScenario.locationLabel}.`
-        );
-        msg.lang = "en-IN";
-        window.speechSynthesis.speak(msg);
-      });
-
-      document.getElementById("btn-open-gmaps").addEventListener("click", function () {
-        window.open(
-          `https://www.google.com/maps?q=${activeScenario.callerLat},${activeScenario.callerLng}`,
-          "_blank",
-          "noopener"
-        );
-      });
-
-      document.getElementById("btn-send-sms").addEventListener("click", function () {
-        const body = encodeURIComponent(
-          `[DHVANI-112 SOS] ${activeScenario.auditVerdict} | Loc: ${activeScenario.locationLabel} (https://maps.google.com/?q=${activeScenario.callerLat},${activeScenario.callerLng}) | Unit: ${activeScenario.unit}`
-        );
-        window.location.href = `sms:112?body=${body}`;
-      });
-
-      document.getElementById("btn-save-json").addEventListener("click", function () {
-        const report = {
-          system: "DHVANI-CAD // NG-ERSS 112",
-          timestamp: new Date().toISOString(),
-          scenario: activeScenario.key,
-          verdict: activeScenario.title,
-          biometrics: {
-            pitchF0: activeScenario.pitch,
-            glottalJitter: activeScenario.jitter,
-            soundLevelDb: activeScenario.db
-          },
-          location: {
-            address: activeScenario.locationLabel,
-            lat: activeScenario.callerLat,
-            lng: activeScenario.callerLng
-          },
-          dispatch: {
-            unit: activeScenario.unit,
-            eta: activeScenario.eta,
-            sirenPolicy: activeScenario.sirenText
-          }
-        };
-        const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `DHVANI_112_REPORT_${Date.now()}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-      });
-
-      // 7. LIVE IST CLOCK
-      setInterval(() => {
-        document.getElementById("header-ist-clock").textContent = new Date().toLocaleTimeString("en-IN", {
-          timeZone: "Asia/Kolkata",
-          hour12: false
-        });
-      }, 1000);
-    })();
-  </script>
+  <script type="module" src="./src/ui/dashboardController.js"></script>
 </body>
 </html>
